@@ -2,11 +2,26 @@
 
 Official multi-language consumer SDKs for [Auth Service](https://github.com/hinha/auth-service) `/v1/consumer-auth/*`.
 
-| Language | Path | Status |
-|---|---|---|
-| **Go** | [`go/`](./go) | Available |
-| Python | — | Planned |
-| TypeScript | — | Planned |
+## Repository layout
+
+This is a **multi-language monorepo**. Each language owns its own folder and package path (unlike single-language repos such as [`redis/go-redis`](https://github.com/redis/go-redis), where the module sits at the repo root as `github.com/redis/go-redis/v9`).
+
+```text
+auth-sdks/
+├── go/                 # module: github.com/hinha/auth-sdks/go
+├── python/             # planned
+├── typescript/         # planned
+├── examples/
+└── README.md
+```
+
+| Language | Path | Module / package | Status |
+|---|---|---|---|
+| **Go** | [`go/`](./go) | `github.com/hinha/auth-sdks/go` | Available |
+| Python | `python/` | planned | Planned |
+| TypeScript | `typescript/` | planned | Planned |
+
+Go version tags for the subdirectory module use the `go/` prefix (Go toolchain rule): `go/v0.1.0` → consumers still write `@v0.1.0`.
 
 ---
 
@@ -18,34 +33,19 @@ Module: [`github.com/hinha/auth-sdks/go`](./go)
 
 **Requires:** Go 1.22+ (module declares `go 1.25`).
 
-#### From a published module / GitHub
-
-The Go module lives in the `go/` subdirectory of repo [`hinha/auth-sdks`](https://github.com/hinha/auth-sdks).
-Git tags for this module use the prefix `go/` (e.g. `go/v0.1.0`). Consumers still request the semantic version:
+#### From GitHub
 
 ```bash
 go get github.com/hinha/auth-sdks/go@v0.1.0
-```
-
-Or:
-
-```bash
+# or
 go get github.com/hinha/auth-sdks/go@latest
 ```
-
-Then import:
 
 ```go
 import authsdk "github.com/hinha/auth-sdks/go"
 ```
 
-#### From a local monorepo (not pushed / private)
-
-If the SDK still lives on disk (`…/auth-sdks/go`), add a `replace` in your app `go.mod`:
-
-```bash
-go get github.com/hinha/auth-sdks/go@v0.0.0
-```
+#### From a local checkout
 
 ```go
 // go.mod
@@ -54,13 +54,7 @@ require github.com/hinha/auth-sdks/go v0.0.0
 replace github.com/hinha/auth-sdks/go => ../auth-sdks/go
 ```
 
-Or an absolute path:
-
-```go
-replace github.com/hinha/auth-sdks/go => /Users/hinha/Projects/hinha/auth-sdks/go
-```
-
-#### Verify the install
+#### Verify
 
 ```bash
 cd go
