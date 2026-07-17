@@ -4,8 +4,8 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/hinha/auth-sdk-go/internal/api"
-	"github.com/hinha/auth-sdk-go/logging"
+	"github.com/hinha/auth-sdks/go/internal/api"
+	"github.com/hinha/auth-sdks/go/logging"
 )
 
 type registerRequest struct {

@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hinha/auth-sdk-go/logging"
+	"github.com/hinha/auth-sdks/go/logging"
 )
 
 func TestSafePathAndLatency(t *testing.T) {

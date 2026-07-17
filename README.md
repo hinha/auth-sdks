@@ -12,7 +12,7 @@ Official multi-language consumer SDKs for [Auth Service](https://github.com/hinh
 
 ## Go
 
-Module: [`github.com/hinha/auth-sdk-go`](./go)
+Module: [`github.com/hinha/auth-sdks/go`](./go)
 
 ### Install
 
@@ -20,22 +20,23 @@ Module: [`github.com/hinha/auth-sdk-go`](./go)
 
 #### From a published module / GitHub
 
-In your consumer project:
+The Go module lives in the `go/` subdirectory of repo [`hinha/auth-sdks`](https://github.com/hinha/auth-sdks).
+Git tags for this module use the prefix `go/` (e.g. `go/v0.1.0`). Consumers still request the semantic version:
 
 ```bash
-go get github.com/hinha/auth-sdk-go@latest
+go get github.com/hinha/auth-sdks/go@v0.1.0
 ```
 
-Or pin a version (after a release tag exists, e.g. `v0.1.0`):
+Or:
 
 ```bash
-go get github.com/hinha/auth-sdk-go@v0.1.0
+go get github.com/hinha/auth-sdks/go@latest
 ```
 
 Then import:
 
 ```go
-import authsdk "github.com/hinha/auth-sdk-go"
+import authsdk "github.com/hinha/auth-sdks/go"
 ```
 
 #### From a local monorepo (not pushed / private)
@@ -43,20 +44,20 @@ import authsdk "github.com/hinha/auth-sdk-go"
 If the SDK still lives on disk (`…/auth-sdks/go`), add a `replace` in your app `go.mod`:
 
 ```bash
-go get github.com/hinha/auth-sdk-go@v0.0.0
+go get github.com/hinha/auth-sdks/go@v0.0.0
 ```
 
 ```go
 // go.mod
-require github.com/hinha/auth-sdk-go v0.0.0
+require github.com/hinha/auth-sdks/go v0.0.0
 
-replace github.com/hinha/auth-sdk-go => ../auth-sdks/go
+replace github.com/hinha/auth-sdks/go => ../auth-sdks/go
 ```
 
 Or an absolute path:
 
 ```go
-replace github.com/hinha/auth-sdk-go => /Users/hinha/Projects/hinha/auth-sdks/go
+replace github.com/hinha/auth-sdks/go => /Users/hinha/Projects/hinha/auth-sdks/go
 ```
 
 #### Verify the install
@@ -99,8 +100,8 @@ import (
 	"log"
 	"os"
 
-	authsdk "github.com/hinha/auth-sdk-go"
-	"github.com/hinha/auth-sdk-go/logging"
+	authsdk "github.com/hinha/auth-sdks/go"
+	"github.com/hinha/auth-sdks/go/logging"
 	"go.uber.org/zap"
 )
 

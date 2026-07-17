@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hinha/auth-sdk-go/logging"
-	"github.com/hinha/auth-sdk-go/transport"
+	"github.com/hinha/auth-sdks/go/logging"
+	"github.com/hinha/auth-sdks/go/transport"
 )
 
 const (

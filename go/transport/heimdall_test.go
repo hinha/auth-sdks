@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/gojek/heimdall/v7"
-	"github.com/hinha/auth-sdk-go/logging"
-	"github.com/hinha/auth-sdk-go/transport"
+	"github.com/hinha/auth-sdks/go/logging"
+	"github.com/hinha/auth-sdks/go/transport"
 )
 
 type capturePlugin struct {

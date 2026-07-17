@@ -10,7 +10,7 @@ import (
 	"github.com/gojek/heimdall/v7"
 	"github.com/gojek/heimdall/v7/httpclient"
 
-	"github.com/hinha/auth-sdk-go/logging"
+	"github.com/hinha/auth-sdks/go/logging"
 )
 
 // Doer is the minimal HTTP port used by the API layer (Dependency Inversion).

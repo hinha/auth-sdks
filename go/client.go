@@ -14,9 +14,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/hinha/auth-sdk-go/internal/api"
-	"github.com/hinha/auth-sdk-go/logging"
-	"github.com/hinha/auth-sdk-go/transport"
+	"github.com/hinha/auth-sdks/go/internal/api"
+	"github.com/hinha/auth-sdks/go/logging"
+	"github.com/hinha/auth-sdks/go/transport"
 )
 
 // Client is the Facade for Auth Service consumer APIs.

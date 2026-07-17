@@ -7,7 +7,7 @@ import (
 	"log/slog"
 	"testing"
 
-	"github.com/hinha/auth-sdk-go/logging"
+	"github.com/hinha/auth-sdks/go/logging"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )

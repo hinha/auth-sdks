@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/hinha/auth-sdk-go/internal/api"
+	"github.com/hinha/auth-sdks/go/internal/api"
 )
 
 // Re-export typed errors so consumers depend only on the root package.

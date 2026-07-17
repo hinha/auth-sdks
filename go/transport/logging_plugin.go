@@ -8,7 +8,7 @@ import (
 
 	"github.com/gojek/heimdall/v7"
 
-	"github.com/hinha/auth-sdk-go/logging"
+	"github.com/hinha/auth-sdks/go/logging"
 )
 
 type ctxKey string

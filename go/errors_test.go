@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/hinha/auth-sdk-go/internal/api"
+	"github.com/hinha/auth-sdks/go/internal/api"
 )
 
 func TestErrorHelpers(t *testing.T) {

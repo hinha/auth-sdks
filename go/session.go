@@ -4,7 +4,7 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/hinha/auth-sdk-go/logging"
+	"github.com/hinha/auth-sdks/go/logging"
 )
 
 type loginRequest struct {

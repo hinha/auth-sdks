@@ -2,7 +2,7 @@ module github.com/hinha/auth-sdks/examples/go-smoke
 
 go 1.25.7
 
-require github.com/hinha/auth-sdk-go v0.0.0
+require github.com/hinha/auth-sdks/go v0.0.0
 
 require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
@@ -18,4 +18,4 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace github.com/hinha/auth-sdk-go => ../../go
+replace github.com/hinha/auth-sdks/go => ../../go

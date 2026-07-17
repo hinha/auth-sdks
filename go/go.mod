@@ -1,4 +1,4 @@
-module github.com/hinha/auth-sdk-go
+module github.com/hinha/auth-sdks/go
 
 go 1.25.7
 

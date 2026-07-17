@@ -6,8 +6,8 @@ import (
 	"log"
 	"os"
 
-	authsdk "github.com/hinha/auth-sdk-go"
-	"github.com/hinha/auth-sdk-go/logging"
+	authsdk "github.com/hinha/auth-sdks/go"
+	"github.com/hinha/auth-sdks/go/logging"
 )
 
 // Smoke example — set AUTH_BASE_URL, APPLICATION_SERVICE, AUTH_API_KEY, AUTH_EMAIL, AUTH_PASSWORD.

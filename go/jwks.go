@@ -13,8 +13,8 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/hinha/auth-sdk-go/internal/api"
-	"github.com/hinha/auth-sdk-go/logging"
+	"github.com/hinha/auth-sdks/go/internal/api"
+	"github.com/hinha/auth-sdks/go/logging"
 )
 
 type jwkSet struct {

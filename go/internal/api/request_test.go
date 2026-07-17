@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hinha/auth-sdk-go/internal/api"
-	"github.com/hinha/auth-sdk-go/logging"
+	"github.com/hinha/auth-sdks/go/internal/api"
+	"github.com/hinha/auth-sdks/go/logging"
 )
 
 type doerFunc func(*http.Request) (*http.Response, error)
