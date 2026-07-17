@@ -2,9 +2,70 @@
 
 Official multi-language consumer SDKs for [Auth Service](https://github.com/hinha/auth-service) `/v1/consumer-auth/*`.
 
-## Go (`go/`)
+| Language | Path | Status |
+|---|---|---|
+| **Go** | [`go/`](./go) | Available |
+| Python | — | Planned |
+| TypeScript | — | Planned |
 
-Module: `github.com/hinha/auth-sdk-go`
+---
+
+## Go
+
+Module: [`github.com/hinha/auth-sdk-go`](./go)
+
+### Install
+
+**Requires:** Go 1.22+ (module declares `go 1.25`).
+
+#### From a published module / GitHub
+
+In your consumer project:
+
+```bash
+go get github.com/hinha/auth-sdk-go@latest
+```
+
+Or pin a version (after a release tag exists, e.g. `v0.1.0`):
+
+```bash
+go get github.com/hinha/auth-sdk-go@v0.1.0
+```
+
+Then import:
+
+```go
+import authsdk "github.com/hinha/auth-sdk-go"
+```
+
+#### From a local monorepo (not pushed / private)
+
+If the SDK still lives on disk (`…/auth-sdks/go`), add a `replace` in your app `go.mod`:
+
+```bash
+go get github.com/hinha/auth-sdk-go@v0.0.0
+```
+
+```go
+// go.mod
+require github.com/hinha/auth-sdk-go v0.0.0
+
+replace github.com/hinha/auth-sdk-go => ../auth-sdks/go
+```
+
+Or an absolute path:
+
+```go
+replace github.com/hinha/auth-sdk-go => /Users/hinha/Projects/hinha/auth-sdks/go
+```
+
+#### Verify the install
+
+```bash
+cd go
+go test ./...
+go test ./... -cover
+```
 
 ### Features
 
@@ -76,12 +137,26 @@ func main() {
 }
 ```
 
-Store `AUTH_API_KEY` on your **backend/BFF** (not in the public SDK repo). Auth Service policy `require_client_api_key` (default true) rejects register/login/forgot/verify/reset without a key bound to the same `application_service`.
+Keep `AUTH_API_KEY` on your **backend/BFF** (not in the browser). When Auth Service policy `require_client_api_key` is enabled (default true), register/login/forgot/verify/reset are rejected without a key bound to the same `application_service`.
 
-### Install
+### Example smoke
 
 ```bash
-cd go && go test ./...
+export AUTH_BASE_URL=http://localhost:8080
+export APPLICATION_SERVICE=memoo
+export AUTH_API_KEY=sa_...
+export AUTH_EMAIL=andi@acme.com
+export AUTH_PASSWORD='P@ssw0rd!'
+
+cd examples/go-smoke
+go run .
 ```
 
-Python / TypeScript packages: planned (see Notion plan).
+### Env vars
+
+| Variable | Required | Description |
+|---|---|---|
+| `AUTH_BASE_URL` | yes | Auth Service origin |
+| `APPLICATION_SERVICE` | yes | Technical service name (max 32) |
+| `AUTH_API_KEY` | yes | Client key `sa_*` |
+| `AUTH_EMAIL` / `AUTH_PASSWORD` | for login demos | End-user credentials |

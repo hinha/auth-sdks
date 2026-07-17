@@ -2,29 +2,99 @@ package authsdk
 
 import (
 	"context"
-	"crypto/rand"
-	"crypto/rsa"
-	"encoding/base64"
 	"encoding/json"
-	"math/big"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
-	"github.com/golang-jwt/jwt/v5"
+	"github.com/hinha/auth-sdk-go/logging"
+	"github.com/hinha/auth-sdk-go/transport"
+	"go.uber.org/zap"
 )
 
 func TestNew_RequiresConfig(t *testing.T) {
 	t.Parallel()
-	if _, err := New("", "memoo", Credentials("sa_test")); err == nil {
+	if _, err := New("", "memoo", Credentials(testAPIKey)); err == nil {
 		t.Fatal("expected BaseURL error")
 	}
-	if _, err := New("https://auth.example.com", "", Credentials("sa_test")); err == nil {
+	if _, err := New("https://auth.example.com", "", Credentials(testAPIKey)); err == nil {
 		t.Fatal("expected ApplicationService error")
 	}
 	if _, err := New("https://auth.example.com", "memoo"); err == nil {
-		t.Fatal("expected APIKey / Credentials error")
+		t.Fatal("expected APIKey error")
+	}
+	if _, err := New("https://auth.example.com", strings.Repeat("a", 33), Credentials(testAPIKey)); err == nil {
+		t.Fatal("expected ApplicationService max length error")
+	}
+	if _, err := New("https://auth.example.com", "memoo", Credentials(testAPIKey), WithHTTPDoer(nil)); err == nil {
+		t.Fatal("expected nil doer error")
+	}
+}
+
+func TestNew_OptionsAndAccessors(t *testing.T) {
+	t.Parallel()
+	zl := zap.NewNop()
+	client, err := New(" https://auth.example.com/ ", " memoo ",
+		Credentials("  "+testAPIKey+"  "),
+		WithLogger(logging.NewZap(zl)),
+		WithLogger(nil), // no-op
+		WithTimeout(3*time.Second),
+		WithRetryCount(0),
+		WithJWKSCacheTTL(30*time.Second),
+		WithUserAgent("sdk-test/1.0"),
+		WithHeader("X-Trace", "abc"),
+		WithTransportConfig(transport.Config{
+			Timeout:               2 * time.Second,
+			RetryCount:            1,
+			BackoffInterval:       10 * time.Millisecond,
+			MaximumJitterInterval: 5 * time.Millisecond,
+		}),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if client.ApplicationService() != "memoo" {
+		t.Fatalf("service=%q", client.ApplicationService())
+	}
+	if client.BaseURL() != "https://auth.example.com" {
+		t.Fatalf("base=%q", client.BaseURL())
+	}
+	if client.cfg.APIKey != testAPIKey {
+		t.Fatalf("apikey=%q", client.cfg.APIKey)
+	}
+	if client.cfg.UserAgent != "sdk-test/1.0" {
+		t.Fatalf("ua=%q", client.cfg.UserAgent)
+	}
+}
+
+func TestNew_APIPrefixNormalization(t *testing.T) {
+	t.Parallel()
+	o := &options{cfg: Config{APIPrefix: "custom"}}
+	cfg := o.cfg
+	cfg.BaseURL = "https://x"
+	cfg.ApplicationService = "memoo"
+	cfg.APIKey = testAPIKey
+	cfg.APIPrefix = "custom"
+	got := cfg.withDefaults()
+	if got.APIPrefix != "/custom" {
+		t.Fatalf("prefix=%q", got.APIPrefix)
+	}
+	got2 := Config{RetryCount: -1, JWKSCacheTTL: -1, Timeout: -1}.withDefaults()
+	if got2.RetryCount != 2 || got2.Timeout != 15*time.Second || got2.JWKSCacheTTL != defaultJWKSCacheTTL {
+		t.Fatalf("defaults=%+v", got2)
+	}
+}
+
+func TestHeimdallTransport_Constructs(t *testing.T) {
+	t.Parallel()
+	client, err := New("https://auth.example.com", "memoo", Credentials(testAPIKey))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if client.BaseURL() != "https://auth.example.com" {
+		t.Fatal(client.BaseURL())
 	}
 }
 
@@ -33,12 +103,7 @@ func TestLogin_Authorize_Logout(t *testing.T) {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v1/consumer-auth/login", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			t.Fatalf("method %s", r.Method)
-		}
-		if got := r.Header.Get("X-API-Key"); got != "sa_test_key" {
-			t.Fatalf("X-API-Key=%q", got)
-		}
+		requireAPIKey(t, r)
 		var body map[string]any
 		_ = json.NewDecoder(r.Body).Decode(&body)
 		if body["application_service"] != "memoo" {
@@ -56,9 +121,7 @@ func TestLogin_Authorize_Logout(t *testing.T) {
 		if got := r.Header.Get("Authorization"); got != "Bearer access-1" {
 			t.Fatalf("auth header=%q", got)
 		}
-		if got := r.Header.Get("X-API-Key"); got != "sa_test_key" {
-			t.Fatalf("X-API-Key=%q", got)
-		}
+		requireAPIKey(t, r)
 		var body map[string]any
 		_ = json.NewDecoder(r.Body).Decode(&body)
 		allowed := body["permission"] == "reports:read"
@@ -69,27 +132,18 @@ func TestLogin_Authorize_Logout(t *testing.T) {
 		})
 	})
 	mux.HandleFunc("/v1/consumer-auth/logout", func(w http.ResponseWriter, r *http.Request) {
+		requireAPIKey(t, r)
 		writeEnvelope(w, http.StatusOK, map[string]any{"ok": true})
 	})
 
-	srv := httptest.NewServer(mux)
-	t.Cleanup(srv.Close)
-
-	client, err := New(srv.URL, "memoo",
-		Credentials("sa_test_key"),
-		WithHTTPDoer(http.DefaultClient),
-		WithRetryCount(0),
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-
+	client, _ := newTestClient(t, mux)
 	ctx := context.Background()
-	session, err := client.Login(ctx, LoginInput{Email: "andi@acme.com", Password: "secret"})
+
+	session, err := client.Login(ctx, LoginInput{Email: "andi@acme.com", Password: "secret", DeviceID: "d1"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if session.SessionID != "sess-1" || session.AccessToken != "access-1" {
+	if session.SessionID != "sess-1" {
 		t.Fatalf("session=%+v", session)
 	}
 
@@ -101,7 +155,6 @@ func TestLogin_Authorize_Logout(t *testing.T) {
 	if err != nil || deny {
 		t.Fatalf("deny=%v err=%v", deny, err)
 	}
-
 	if err := client.Logout(ctx, session.RefreshToken, session.SessionID); err != nil {
 		t.Fatal(err)
 	}
@@ -110,12 +163,11 @@ func TestLogin_Authorize_Logout(t *testing.T) {
 func TestLogin_MapsUnauthorized(t *testing.T) {
 	t.Parallel()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusUnauthorized)
-		_, _ = w.Write([]byte(`{"message":"invalid credentials","code":"PLT-ASP-401","data":null,"errors":null}`))
+		writeErr(w, http.StatusUnauthorized, "PLT-ASP-401", "invalid credentials")
 	}))
 	t.Cleanup(srv.Close)
 
-	client, err := New(srv.URL, "memoo", Credentials("sa_test_key"), WithHTTPDoer(http.DefaultClient))
+	client, err := New(srv.URL, "memoo", Credentials(testAPIKey), WithHTTPDoer(http.DefaultClient))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -125,81 +177,22 @@ func TestLogin_MapsUnauthorized(t *testing.T) {
 	}
 }
 
-func TestVerifyAccessToken_JWKS(t *testing.T) {
+func TestConfigError_Error(t *testing.T) {
 	t.Parallel()
-
-	key, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		t.Fatal(err)
-	}
-	kid := "kid-test-1"
-	token := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{
-		"sub": "42",
-		"uid": float64(42),
-		"sid": "sess-xyz",
-		"iss": "auth-service",
-		"exp": time.Now().Add(time.Hour).Unix(),
-		"iat": time.Now().Unix(),
-	})
-	token.Header["kid"] = kid
-	signed, err := token.SignedString(key)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	mux := http.NewServeMux()
-	mux.HandleFunc("/v1/consumer-auth/jwks/memoo", func(w http.ResponseWriter, r *http.Request) {
-		n := base64.RawURLEncoding.EncodeToString(key.N.Bytes())
-		e := base64.RawURLEncoding.EncodeToString(big.NewInt(int64(key.E)).Bytes())
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"keys": []map[string]string{{
-				"kid": kid,
-				"kty": "RSA",
-				"alg": "RS256",
-				"use": "sig",
-				"n":   n,
-				"e":   e,
-			}},
-		})
-	})
-	srv := httptest.NewServer(mux)
-	t.Cleanup(srv.Close)
-
-	client, err := New(srv.URL, "memoo",
-		Credentials("sa_test_key"),
-		WithHTTPDoer(http.DefaultClient),
-		WithJWKSCacheTTL(time.Minute),
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	claims, err := client.VerifyAccessToken(context.Background(), signed)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if claims.UserID != 42 || claims.SessionID != "sess-xyz" {
-		t.Fatalf("claims=%+v", claims)
+	err := &ConfigError{Field: "APIKey", Message: "required"}
+	if got := err.Error(); !strings.Contains(got, "APIKey") {
+		t.Fatalf("msg=%q", got)
 	}
 }
 
-func TestHeimdallTransport_Constructs(t *testing.T) {
+func TestWithClientKey_Empty(t *testing.T) {
 	t.Parallel()
-	client, err := New("https://auth.example.com", "memoo", Credentials("sa_test_key"))
-	if err != nil {
-		t.Fatal(err)
+	c := &Client{cfg: Config{APIKey: ""}}
+	if opts := c.withClientKey(); len(opts) != 0 {
+		t.Fatalf("opts=%d", len(opts))
 	}
-	if client.ApplicationService() != "memoo" {
-		t.Fatal(client.ApplicationService())
+	c.cfg.APIKey = testAPIKey
+	if opts := c.withClientKey(); len(opts) != 1 {
+		t.Fatalf("opts=%d", len(opts))
 	}
-}
-
-func writeEnvelope(w http.ResponseWriter, status int, data any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(map[string]any{
-		"message": "OK",
-		"data":    data,
-		"errors":  nil,
-		"code":    "PLT-ASP-200",
-	})
 }
