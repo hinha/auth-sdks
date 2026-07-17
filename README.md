@@ -74,6 +74,7 @@ go test ./... -cover
 - Structured logging Strategy (`Zap` / `slog` / `Nop`) + Heimdall request plugin
 - **Client API key gate** via `Credentials(sa_*)` (required on `New`)
 - User session: login / refresh / logout / introspect
+- **First-login bootstrap**: `IsFirstLogin` / `FirstLogin` for operator temp passwords
 - JWT verify via JWKS cache (no hardcoded keys)
 - `AuthorizeAction` hybrid RBAC
 - Lifecycle: register / verify-email / password flows
@@ -121,7 +122,22 @@ func main() {
 		Password: "P@ssw0rd!",
 	})
 	if err != nil {
-		log.Fatal(err)
+		if authsdk.IsFirstLogin(err) {
+			// Operator-provisioned temp password: force change, then login again.
+			if _, err := client.FirstLogin(ctx, authsdk.FirstLoginInput{
+				Email:           "andi@acme.com",
+				CurrentPassword: "P@ssw0rd!",
+				NewPassword:     "N3wP@ss!",
+			}); err != nil {
+				log.Fatal(err)
+			}
+			session, err = client.Login(ctx, authsdk.LoginInput{
+				Email: "andi@acme.com", Password: "N3wP@ss!",
+			})
+		}
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 
 	claims, err := client.VerifyAccessToken(ctx, session.AccessToken)
@@ -138,7 +154,9 @@ func main() {
 }
 ```
 
-Keep `AUTH_API_KEY` on your **backend/BFF** (not in the browser). When Auth Service policy `require_client_api_key` is enabled (default true), register/login/forgot/verify/reset are rejected without a key bound to the same `application_service`.
+Keep `AUTH_API_KEY` on your **backend/BFF** (not in the browser). When Auth Service policy `require_client_api_key` is enabled (default true), register/login/forgot/verify/reset/**first-login** are rejected without a key bound to the same `application_service`.
+
+When Nuts creates an `app_user` with a temp password (`last_login` null), `Login` returns `FirstLoginError` (`IsFirstLogin`). Call `FirstLogin` then `Login` again — no JWT is issued until the password is changed.
 
 ### Example smoke
 
@@ -161,3 +179,4 @@ go run .
 | `APPLICATION_SERVICE` | yes | Technical service name (max 32) |
 | `AUTH_API_KEY` | yes | Client key `sa_*` |
 | `AUTH_EMAIL` / `AUTH_PASSWORD` | for login demos | End-user credentials |
+| `AUTH_NEW_PASSWORD` | first-login smoke | New password when Login returns first-login gate |

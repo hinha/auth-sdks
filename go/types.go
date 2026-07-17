@@ -37,6 +37,22 @@ type RegisterResult struct {
 	Session              *Session `json:"session,omitempty"`
 }
 
+// FirstLoginInput completes the forced password change for an
+// operator-provisioned app_user (temp password / null last_login).
+// No session is issued — call Login again after success.
+type FirstLoginInput struct {
+	Email           string
+	CurrentPassword string
+	NewPassword     string
+	ConfirmPassword string
+}
+
+// FirstLoginResult is returned by FirstLogin.
+type FirstLoginResult struct {
+	Message string `json:"message"`
+	Refer   string `json:"refer"`
+}
+
 // AuthorizeActionInput evaluates a permission key (hybrid RBAC).
 type AuthorizeActionInput struct {
 	Permission string

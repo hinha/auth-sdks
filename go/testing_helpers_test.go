@@ -39,11 +39,15 @@ func writeEnvelope(w http.ResponseWriter, status int, data any) {
 }
 
 func writeErr(w http.ResponseWriter, status int, code, msg string) {
+	writeErrData(w, status, code, msg, nil)
+}
+
+func writeErrData(w http.ResponseWriter, status int, code, msg string, data any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"message": msg,
-		"data":    nil,
+		"data":    data,
 		"errors":  nil,
 		"code":    code,
 	})

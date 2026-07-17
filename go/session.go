@@ -30,6 +30,10 @@ type introspectRequest struct {
 }
 
 // Login authenticates an app_user against the configured application_service.
+// When the account still has a temp password (null last_login), Auth returns
+// 403 with data.refer=/v1/consumer-auth/first-login — Login wraps that as
+// FirstLoginError (IsFirstLogin). Call FirstLogin then Login again; no session
+// is issued until the password is changed.
 func (c *Client) Login(ctx context.Context, in LoginInput) (*Session, error) {
 	logging.Info(ctx, c.log, "login_start", logging.String("email", redactEmail(in.Email)))
 	var out Session
@@ -41,6 +45,13 @@ func (c *Client) Login(ctx context.Context, in LoginInput) (*Session, error) {
 		DeviceID:           in.DeviceID,
 	}, &out, c.withClientKey()...)
 	if err != nil {
+		if fl, ok := AsFirstLogin(err); ok {
+			logging.Warn(ctx, c.log, "login_first_login_required",
+				logging.String("refer", fl.Refer),
+				logging.String("application_service", fl.ApplicationService),
+			)
+			return nil, fl
+		}
 		logging.Warn(ctx, c.log, "login_failed", logging.Err(err))
 		return nil, err
 	}
