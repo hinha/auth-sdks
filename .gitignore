@@ -1,0 +1,8 @@
+.DS_Store
+*.exe
+*.test
+*.out
+bin/
+dist/
+.idea/
+.vscode/
