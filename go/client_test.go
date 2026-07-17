@@ -177,6 +177,31 @@ func TestLogin_MapsUnauthorized(t *testing.T) {
 	}
 }
 
+func TestLogin_MapsFirstLogin(t *testing.T) {
+	t.Parallel()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/v1/consumer-auth/login", func(w http.ResponseWriter, r *http.Request) {
+		requireAPIKey(t, r)
+		writeErrData(w, http.StatusForbidden, "PLT-ASP-403", "First login required", map[string]string{
+			"refer":               "/v1/consumer-auth/first-login",
+			"application_service": "memoo",
+		})
+	})
+	client, _ := newTestClient(t, mux)
+
+	_, err := client.Login(context.Background(), LoginInput{Email: "andi@acme.com", Password: "Temp#1"})
+	if !IsFirstLogin(err) {
+		t.Fatalf("expected first-login, got %v", err)
+	}
+	fl, ok := AsFirstLogin(err)
+	if !ok || fl.Refer != "/v1/consumer-auth/first-login" || fl.ApplicationService != "memoo" {
+		t.Fatalf("%+v ok=%v", fl, ok)
+	}
+	if !IsForbidden(err) {
+		t.Fatal("FirstLoginError should also match IsForbidden")
+	}
+}
+
 func TestConfigError_Error(t *testing.T) {
 	t.Parallel()
 	err := &ConfigError{Field: "APIKey", Message: "required"}

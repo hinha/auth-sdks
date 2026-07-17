@@ -78,6 +78,44 @@ func TestLifecycle_RegisterAndPasswordFlows(t *testing.T) {
 	}
 }
 
+func TestLifecycle_FirstLogin(t *testing.T) {
+	t.Parallel()
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/v1/consumer-auth/first-login", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPut {
+			t.Fatalf("method=%s", r.Method)
+		}
+		requireAPIKey(t, r)
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		if body["email"] != "andi@acme.com" ||
+			body["current_password"] != "Temp#1" ||
+			body["new_password"] != "N3wP@ss!" ||
+			body["confirm_password"] != "N3wP@ss!" ||
+			body["application_service"] != "memoo" {
+			t.Fatalf("body=%v", body)
+		}
+		writeEnvelope(w, http.StatusOK, map[string]any{
+			"message": "Password changed successfully",
+			"refer":   "/v1/consumer-auth/login",
+		})
+	})
+
+	client, _ := newTestClient(t, mux)
+	out, err := client.FirstLogin(context.Background(), FirstLoginInput{
+		Email:           "andi@acme.com",
+		CurrentPassword: "Temp#1",
+		NewPassword:     "N3wP@ss!",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.Refer != "/v1/consumer-auth/login" {
+		t.Fatalf("%+v", out)
+	}
+}
+
 func TestLifecycle_RegisterError(t *testing.T) {
 	t.Parallel()
 	mux := http.NewServeMux()

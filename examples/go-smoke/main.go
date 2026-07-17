@@ -34,7 +34,30 @@ func main() {
 		Password: os.Getenv("AUTH_PASSWORD"),
 	})
 	if err != nil {
-		log.Fatal(err)
+		if authsdk.IsFirstLogin(err) {
+			fl, _ := authsdk.AsFirstLogin(err)
+			fmt.Println("first_login_required refer=", fl.Refer)
+			newPassword := os.Getenv("AUTH_NEW_PASSWORD")
+			if newPassword == "" {
+				log.Fatal("set AUTH_NEW_PASSWORD to complete first-login smoke")
+			}
+			if _, err := client.FirstLogin(ctx, authsdk.FirstLoginInput{
+				Email:           os.Getenv("AUTH_EMAIL"),
+				CurrentPassword: os.Getenv("AUTH_PASSWORD"),
+				NewPassword:     newPassword,
+			}); err != nil {
+				log.Fatal("first-login: ", err)
+			}
+			session, err = client.Login(ctx, authsdk.LoginInput{
+				Email:    os.Getenv("AUTH_EMAIL"),
+				Password: newPassword,
+			})
+			if err != nil {
+				log.Fatal(err)
+			}
+		} else {
+			log.Fatal(err)
+		}
 	}
 	fmt.Println("session_id=", session.SessionID)
 
