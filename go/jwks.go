@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math/big"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -231,6 +232,12 @@ func mapToClaims(mc jwt.MapClaims) *Claims {
 	}
 	out.SessionID = claimString(mc, "sid", "session_id")
 	out.UserID = claimUint(mc, "uid", "user_id")
+	if out.UserID == 0 && out.Subject != "" {
+		// Consumer access tokens historically only set sub (user id as string).
+		if n, err := strconv.ParseUint(out.Subject, 10, 64); err == nil {
+			out.UserID = uint(n)
+		}
+	}
 	return out
 }
 
@@ -261,6 +268,11 @@ func claimUint(mc jwt.MapClaims, keys ...string) uint {
 			return uint(n)
 		case int64:
 			return uint(n)
+		case string:
+			i, err := strconv.ParseUint(n, 10, 64)
+			if err == nil {
+				return uint(i)
+			}
 		}
 	}
 	return 0

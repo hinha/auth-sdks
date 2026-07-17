@@ -83,6 +83,41 @@ func TestVerifyAccessToken_JWKS(t *testing.T) {
 	}
 }
 
+func TestVerifyAccessToken_UserIDFromSubFallback(t *testing.T) {
+	t.Parallel()
+
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	kid := "kid-sub-only"
+	signed := signRS256(t, key, kid, jwt.MapClaims{
+		"sub": "7",
+		"sid": "sess-sub",
+		"iss": "auth-service",
+		"aud": []string{"memoo", "consumer"},
+		"exp": time.Now().Add(time.Hour).Unix(),
+		"iat": time.Now().Unix(),
+	})
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/v1/consumer-auth/jwks/memoo", func(w http.ResponseWriter, r *http.Request) {
+		requireAPIKey(t, r)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"keys": []map[string]string{rsaJWK(t, key, kid)},
+		})
+	})
+
+	client, _ := newTestClient(t, mux, WithJWKSCacheTTL(time.Minute))
+	claims, err := client.VerifyAccessToken(context.Background(), signed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if claims.UserID != 7 {
+		t.Fatalf("expected UserID from sub, got %+v", claims)
+	}
+}
+
 func TestVerifyAccessToken_EmptyAndInvalid(t *testing.T) {
 	t.Parallel()
 	mux := http.NewServeMux()
