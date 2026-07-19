@@ -110,11 +110,12 @@ func TestLogin_Authorize_Logout(t *testing.T) {
 			t.Fatalf("service=%v", body["application_service"])
 		}
 		writeEnvelope(w, http.StatusOK, map[string]any{
-			"access_token":  "access-1",
-			"refresh_token": "refresh-1",
-			"token_type":    "Bearer",
-			"expires_in":    900,
-			"session_id":    "sess-1",
+			"access_token":       "access-1",
+			"refresh_token":      "refresh-1",
+			"token_type":         "Bearer",
+			"expires_in":         900,
+			"refresh_expires_in": 604800,
+			"session_id":         "sess-1",
 		})
 	})
 	mux.HandleFunc("/v1/consumer-auth/authorize-action", func(w http.ResponseWriter, r *http.Request) {
@@ -145,6 +146,9 @@ func TestLogin_Authorize_Logout(t *testing.T) {
 	}
 	if session.SessionID != "sess-1" {
 		t.Fatalf("session=%+v", session)
+	}
+	if session.RefreshExpiresIn != 604800 {
+		t.Fatalf("refresh_expires_in=%d", session.RefreshExpiresIn)
 	}
 
 	allow, err := client.Allow(ctx, session.AccessToken, "reports:read")

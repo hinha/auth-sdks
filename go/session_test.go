@@ -44,11 +44,12 @@ func TestRefresh_Introspect_LogoutValidation(t *testing.T) {
 			t.Fatalf("body=%v", body)
 		}
 		writeEnvelope(w, http.StatusOK, map[string]any{
-			"access_token":  "access-2",
-			"refresh_token": "rt-2",
-			"token_type":    "Bearer",
-			"expires_in":    900,
-			"session_id":    "sess-2",
+			"access_token":       "access-2",
+			"refresh_token":      "rt-2",
+			"token_type":         "Bearer",
+			"expires_in":         900,
+			"refresh_expires_in": 86400,
+			"session_id":         "sess-2",
 		})
 	})
 	mux.HandleFunc("/v1/consumer-auth/introspect", func(w http.ResponseWriter, r *http.Request) {
@@ -75,6 +76,9 @@ func TestRefresh_Introspect_LogoutValidation(t *testing.T) {
 	}
 	if session.AccessToken != "access-2" {
 		t.Fatalf("%+v", session)
+	}
+	if session.RefreshExpiresIn != 86400 {
+		t.Fatalf("refresh_expires_in=%d", session.RefreshExpiresIn)
 	}
 
 	info, err := client.Introspect(ctx, "access-2", "")
