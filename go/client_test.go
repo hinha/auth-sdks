@@ -110,11 +110,12 @@ func TestLogin_Authorize_Logout(t *testing.T) {
 			t.Fatalf("service=%v", body["application_service"])
 		}
 		writeEnvelope(w, http.StatusOK, map[string]any{
-			"access_token":  "access-1",
-			"refresh_token": "refresh-1",
-			"token_type":    "Bearer",
-			"expires_in":    900,
-			"session_id":    "sess-1",
+			"access_token":       "access-1",
+			"refresh_token":      "refresh-1",
+			"token_type":         "Bearer",
+			"expires_in":         900,
+			"refresh_expires_in": 604800,
+			"session_id":         "sess-1",
 		})
 	})
 	mux.HandleFunc("/v1/consumer-auth/authorize-action", func(w http.ResponseWriter, r *http.Request) {
@@ -146,6 +147,9 @@ func TestLogin_Authorize_Logout(t *testing.T) {
 	if session.SessionID != "sess-1" {
 		t.Fatalf("session=%+v", session)
 	}
+	if session.RefreshExpiresIn != 604800 {
+		t.Fatalf("refresh_expires_in=%d", session.RefreshExpiresIn)
+	}
 
 	allow, err := client.Allow(ctx, session.AccessToken, "reports:read")
 	if err != nil || !allow {
@@ -174,6 +178,31 @@ func TestLogin_MapsUnauthorized(t *testing.T) {
 	_, err = client.Login(context.Background(), LoginInput{Email: "a@b.c", Password: "x"})
 	if !IsUnauthorized(err) {
 		t.Fatalf("expected unauthorized, got %v", err)
+	}
+}
+
+func TestLogin_MapsFirstLogin(t *testing.T) {
+	t.Parallel()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/v1/consumer-auth/login", func(w http.ResponseWriter, r *http.Request) {
+		requireAPIKey(t, r)
+		writeErrData(w, http.StatusForbidden, "PLT-ASP-403", "First login required", map[string]string{
+			"refer":               "/v1/consumer-auth/first-login",
+			"application_service": "memoo",
+		})
+	})
+	client, _ := newTestClient(t, mux)
+
+	_, err := client.Login(context.Background(), LoginInput{Email: "andi@acme.com", Password: "Temp#1"})
+	if !IsFirstLogin(err) {
+		t.Fatalf("expected first-login, got %v", err)
+	}
+	fl, ok := AsFirstLogin(err)
+	if !ok || fl.Refer != "/v1/consumer-auth/first-login" || fl.ApplicationService != "memoo" {
+		t.Fatalf("%+v ok=%v", fl, ok)
+	}
+	if !IsForbidden(err) {
+		t.Fatal("FirstLoginError should also match IsForbidden")
 	}
 }
 

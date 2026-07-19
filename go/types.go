@@ -4,11 +4,12 @@ import "time"
 
 // Session is returned by Login / Refresh (and optionally Register).
 type Session struct {
-	AccessToken  string `json:"access_token"`
-	RefreshToken string `json:"refresh_token"`
-	TokenType    string `json:"token_type"`
-	ExpiresIn    int64  `json:"expires_in"`
-	SessionID    string `json:"session_id"`
+	AccessToken      string `json:"access_token"`
+	RefreshToken     string `json:"refresh_token"`
+	TokenType        string `json:"token_type"`
+	ExpiresIn        int64  `json:"expires_in"`
+	RefreshExpiresIn int64  `json:"refresh_expires_in,omitempty"`
+	SessionID        string `json:"session_id"`
 }
 
 // LoginInput is the password login payload.
@@ -35,6 +36,22 @@ type RegisterResult struct {
 	Status               string   `json:"status"`
 	VerificationRequired bool     `json:"verification_required"`
 	Session              *Session `json:"session,omitempty"`
+}
+
+// FirstLoginInput completes the forced password change for an
+// operator-provisioned app_user (temp password / null last_login).
+// No session is issued — call Login again after success.
+type FirstLoginInput struct {
+	Email           string
+	CurrentPassword string
+	NewPassword     string
+	ConfirmPassword string
+}
+
+// FirstLoginResult is returned by FirstLogin.
+type FirstLoginResult struct {
+	Message string `json:"message"`
+	Refer   string `json:"refer"`
 }
 
 // AuthorizeActionInput evaluates a permission key (hybrid RBAC).

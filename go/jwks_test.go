@@ -60,7 +60,7 @@ func TestVerifyAccessToken_JWKS(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v1/consumer-auth/jwks/memoo", func(w http.ResponseWriter, r *http.Request) {
 		requireAPIKey(t, r)
-		_ = json.NewEncoder(w).Encode(map[string]any{
+		writeEnvelope(w, http.StatusOK, map[string]any{
 			"keys": []map[string]string{rsaJWK(t, key, kid)},
 		})
 	})
@@ -83,11 +83,46 @@ func TestVerifyAccessToken_JWKS(t *testing.T) {
 	}
 }
 
+func TestVerifyAccessToken_UserIDFromSubFallback(t *testing.T) {
+	t.Parallel()
+
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	kid := "kid-sub-only"
+	signed := signRS256(t, key, kid, jwt.MapClaims{
+		"sub": "7",
+		"sid": "sess-sub",
+		"iss": "auth-service",
+		"aud": []string{"memoo", "consumer"},
+		"exp": time.Now().Add(time.Hour).Unix(),
+		"iat": time.Now().Unix(),
+	})
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/v1/consumer-auth/jwks/memoo", func(w http.ResponseWriter, r *http.Request) {
+		requireAPIKey(t, r)
+		writeEnvelope(w, http.StatusOK, map[string]any{
+			"keys": []map[string]string{rsaJWK(t, key, kid)},
+		})
+	})
+
+	client, _ := newTestClient(t, mux, WithJWKSCacheTTL(time.Minute))
+	claims, err := client.VerifyAccessToken(context.Background(), signed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if claims.UserID != 7 {
+		t.Fatalf("expected UserID from sub, got %+v", claims)
+	}
+}
+
 func TestVerifyAccessToken_EmptyAndInvalid(t *testing.T) {
 	t.Parallel()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v1/consumer-auth/jwks/memoo", func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewEncoder(w).Encode(map[string]any{"keys": []any{}})
+		writeEnvelope(w, http.StatusOK, map[string]any{"keys": []any{}})
 	})
 	client, _ := newTestClient(t, mux)
 
@@ -114,7 +149,7 @@ func TestVerifyAccessToken_KidRefreshAndNoKid(t *testing.T) {
 		if calls >= 2 {
 			kid = "new-kid"
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{
+		writeEnvelope(w, http.StatusOK, map[string]any{
 			"keys": []map[string]string{rsaJWK(t, key, kid)},
 		})
 	})
@@ -138,7 +173,7 @@ func TestVerifyAccessToken_KidRefreshAndNoKid(t *testing.T) {
 
 	// No kid + single key.
 	client2, _ := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewEncoder(w).Encode(map[string]any{
+		writeEnvelope(w, http.StatusOK, map[string]any{
 			"keys": []map[string]string{rsaJWK(t, key, "")},
 		})
 	}), WithJWKSCacheTTL(time.Minute))
@@ -157,7 +192,7 @@ func TestJWKS_LookupMultiKeyRequiresKid(t *testing.T) {
 	key2, _ := rsa.GenerateKey(rand.Reader, 2048)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v1/consumer-auth/jwks/memoo", func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewEncoder(w).Encode(map[string]any{
+		writeEnvelope(w, http.StatusOK, map[string]any{
 			"keys": []map[string]string{
 				rsaJWK(t, key1, "k1"),
 				rsaJWK(t, key2, "k2"),
@@ -180,7 +215,7 @@ func TestJWKS_SkipsNonRSAAndInvalid(t *testing.T) {
 	t.Run("no rsa keys", func(t *testing.T) {
 		mux := http.NewServeMux()
 		mux.HandleFunc("/v1/consumer-auth/jwks/memoo", func(w http.ResponseWriter, r *http.Request) {
-			_ = json.NewEncoder(w).Encode(map[string]any{
+			writeEnvelope(w, http.StatusOK, map[string]any{
 				"keys": []map[string]string{{"kty": "EC", "kid": "ec1"}},
 			})
 		})
@@ -193,7 +228,7 @@ func TestJWKS_SkipsNonRSAAndInvalid(t *testing.T) {
 	t.Run("bad n", func(t *testing.T) {
 		mux := http.NewServeMux()
 		mux.HandleFunc("/v1/consumer-auth/jwks/memoo", func(w http.ResponseWriter, r *http.Request) {
-			_ = json.NewEncoder(w).Encode(map[string]any{
+			writeEnvelope(w, http.StatusOK, map[string]any{
 				"keys": []map[string]string{{
 					"kty": "RSA", "kid": "bad", "n": "!!!", "e": "AQAB",
 				}},
@@ -209,7 +244,7 @@ func TestJWKS_SkipsNonRSAAndInvalid(t *testing.T) {
 		key, _ := rsa.GenerateKey(rand.Reader, 2048)
 		mux := http.NewServeMux()
 		mux.HandleFunc("/v1/consumer-auth/jwks/memoo", func(w http.ResponseWriter, r *http.Request) {
-			_ = json.NewEncoder(w).Encode(map[string]any{
+			writeEnvelope(w, http.StatusOK, map[string]any{
 				"keys": []map[string]string{{
 					"kty": "RSA",
 					"kid": "bad-e",
@@ -228,7 +263,7 @@ func TestJWKS_SkipsNonRSAAndInvalid(t *testing.T) {
 		key, _ := rsa.GenerateKey(rand.Reader, 2048)
 		mux := http.NewServeMux()
 		mux.HandleFunc("/v1/consumer-auth/jwks/memoo", func(w http.ResponseWriter, r *http.Request) {
-			_ = json.NewEncoder(w).Encode(map[string]any{
+			writeEnvelope(w, http.StatusOK, map[string]any{
 				"keys": []map[string]string{{
 					"kty": "RSA",
 					"kid": "zero-e",
@@ -279,7 +314,7 @@ func TestJWKS_LookupKidMissAndFreshRefresh(t *testing.T) {
 	key, _ := rsa.GenerateKey(rand.Reader, 2048)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v1/consumer-auth/jwks/memoo", func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewEncoder(w).Encode(map[string]any{
+		writeEnvelope(w, http.StatusOK, map[string]any{
 			"keys": []map[string]string{rsaJWK(t, key, "only-kid")},
 		})
 	})

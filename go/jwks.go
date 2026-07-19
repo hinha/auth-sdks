@@ -8,12 +8,12 @@ import (
 	"fmt"
 	"math/big"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/hinha/auth-sdks/go/internal/api"
 	"github.com/hinha/auth-sdks/go/logging"
 )
 
@@ -49,10 +49,13 @@ func newJWKSCache(c *Client, ttl time.Duration) *jwksCache {
 }
 
 // GetJWKS fetches (or returns cached) JWKS for the application service.
+// Auth Service wraps the set in the standard {data:{keys:[]}} envelope — do
+// not use WithRawBody or Keys stay empty and VerifyAccessToken always 401s
+// (while Login still creates PG sessions).
 func (c *Client) GetJWKS(ctx context.Context) (*jwkSet, error) {
 	var set jwkSet
 	path := c.path("/jwks/" + c.cfg.ApplicationService)
-	err := c.api.DoJSON(ctx, http.MethodGet, path, nil, &set, c.withClientKey(api.WithRawBody())...)
+	err := c.api.DoJSON(ctx, http.MethodGet, path, nil, &set, c.withClientKey()...)
 	if err != nil {
 		return nil, err
 	}
@@ -231,6 +234,12 @@ func mapToClaims(mc jwt.MapClaims) *Claims {
 	}
 	out.SessionID = claimString(mc, "sid", "session_id")
 	out.UserID = claimUint(mc, "uid", "user_id")
+	if out.UserID == 0 && out.Subject != "" {
+		// Consumer access tokens historically only set sub (user id as string).
+		if n, err := strconv.ParseUint(out.Subject, 10, 64); err == nil {
+			out.UserID = uint(n)
+		}
+	}
 	return out
 }
 
@@ -261,6 +270,11 @@ func claimUint(mc jwt.MapClaims, keys ...string) uint {
 			return uint(n)
 		case int64:
 			return uint(n)
+		case string:
+			i, err := strconv.ParseUint(n, 10, 64)
+			if err == nil {
+				return uint(i)
+			}
 		}
 	}
 	return 0

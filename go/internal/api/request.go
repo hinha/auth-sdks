@@ -134,7 +134,8 @@ func WithAPIKey(key string) CallOption {
 	return func(c *callConfig) { c.apiKey = key }
 }
 
-// WithRawBody decodes the full response body (no Auth envelope), e.g. JWKS.
+// WithRawBody decodes the full response body (no Auth envelope).
+// Prefer the default envelope decode for Auth Service endpoints (including JWKS).
 func WithRawBody() CallOption {
 	return func(c *callConfig) { c.rawBody = true }
 }

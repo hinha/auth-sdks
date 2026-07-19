@@ -14,6 +14,11 @@ func TestErrorHelpers(t *testing.T) {
 	forbid := &ForbiddenError{APIError: &APIError{StatusCode: 403, Code: "403", Message: "no"}}
 	valid := &ValidationError{APIError: &APIError{StatusCode: 400, Code: "400", Message: "no"}}
 	netErr := &NetworkError{Op: "POST /x", Err: errors.New("dial")}
+	first := &FirstLoginError{
+		ForbiddenError:     forbid,
+		Refer:              "/v1/consumer-auth/first-login",
+		ApplicationService: "memoo",
+	}
 
 	if !IsUnauthorized(unauth) || IsUnauthorized(forbid) {
 		t.Fatal("unauthorized helper")
@@ -23,6 +28,12 @@ func TestErrorHelpers(t *testing.T) {
 	}
 	if !IsValidation(valid) || IsValidation(unauth) {
 		t.Fatal("validation helper")
+	}
+	if !IsFirstLogin(first) || IsFirstLogin(forbid) {
+		t.Fatal("first-login helper")
+	}
+	if first.Error() == "" || first.Unwrap() == nil {
+		t.Fatal("first-login methods")
 	}
 	if unauth.Error() == "" || unauth.Unwrap() == nil {
 		t.Fatal("unauthorized methods")
@@ -42,5 +53,9 @@ func TestErrorHelpers(t *testing.T) {
 	var nilAPI *api.APIError
 	if nilAPI.Error() != "api: unknown error" {
 		t.Fatalf("nil api error: %q", nilAPI.Error())
+	}
+	var nilFL *FirstLoginError
+	if nilFL.Error() != "auth first-login required" {
+		t.Fatalf("nil first-login: %q", nilFL.Error())
 	}
 }

@@ -2,11 +2,26 @@
 
 Official multi-language consumer SDKs for [Auth Service](https://github.com/hinha/auth-service) `/v1/consumer-auth/*`.
 
-| Language | Path | Status |
-|---|---|---|
-| **Go** | [`go/`](./go) | Available |
-| Python | — | Planned |
-| TypeScript | — | Planned |
+## Repository layout
+
+This is a **multi-language monorepo**. Each language owns its own folder and package path (unlike single-language repos such as [`redis/go-redis`](https://github.com/redis/go-redis), where the module sits at the repo root as `github.com/redis/go-redis/v9`).
+
+```text
+auth-sdks/
+├── go/                 # module: github.com/hinha/auth-sdks/go
+├── python/             # planned
+├── typescript/         # planned
+├── examples/
+└── README.md
+```
+
+| Language | Path | Module / package | Status |
+|---|---|---|---|
+| **Go** | [`go/`](./go) | `github.com/hinha/auth-sdks/go` | Available |
+| Python | `python/` | planned | Planned |
+| TypeScript | `typescript/` | planned | Planned |
+
+Go version tags for the subdirectory module use the `go/` prefix (Go toolchain rule): `go/v0.1.0` → consumers still write `@v0.1.0`.
 
 ---
 
@@ -18,34 +33,19 @@ Module: [`github.com/hinha/auth-sdks/go`](./go)
 
 **Requires:** Go 1.22+ (module declares `go 1.25`).
 
-#### From a published module / GitHub
-
-The Go module lives in the `go/` subdirectory of repo [`hinha/auth-sdks`](https://github.com/hinha/auth-sdks).
-Git tags for this module use the prefix `go/` (e.g. `go/v0.1.0`). Consumers still request the semantic version:
+#### From GitHub
 
 ```bash
 go get github.com/hinha/auth-sdks/go@v0.1.0
-```
-
-Or:
-
-```bash
+# or
 go get github.com/hinha/auth-sdks/go@latest
 ```
-
-Then import:
 
 ```go
 import authsdk "github.com/hinha/auth-sdks/go"
 ```
 
-#### From a local monorepo (not pushed / private)
-
-If the SDK still lives on disk (`…/auth-sdks/go`), add a `replace` in your app `go.mod`:
-
-```bash
-go get github.com/hinha/auth-sdks/go@v0.0.0
-```
+#### From a local checkout
 
 ```go
 // go.mod
@@ -54,13 +54,7 @@ require github.com/hinha/auth-sdks/go v0.0.0
 replace github.com/hinha/auth-sdks/go => ../auth-sdks/go
 ```
 
-Or an absolute path:
-
-```go
-replace github.com/hinha/auth-sdks/go => /Users/hinha/Projects/hinha/auth-sdks/go
-```
-
-#### Verify the install
+#### Verify
 
 ```bash
 cd go
@@ -74,6 +68,7 @@ go test ./... -cover
 - Structured logging Strategy (`Zap` / `slog` / `Nop`) + Heimdall request plugin
 - **Client API key gate** via `Credentials(sa_*)` (required on `New`)
 - User session: login / refresh / logout / introspect
+- **First-login bootstrap**: `IsFirstLogin` / `FirstLogin` for operator temp passwords
 - JWT verify via JWKS cache (no hardcoded keys)
 - `AuthorizeAction` hybrid RBAC
 - Lifecycle: register / verify-email / password flows
@@ -121,7 +116,22 @@ func main() {
 		Password: "P@ssw0rd!",
 	})
 	if err != nil {
-		log.Fatal(err)
+		if authsdk.IsFirstLogin(err) {
+			// Operator-provisioned temp password: force change, then login again.
+			if _, err := client.FirstLogin(ctx, authsdk.FirstLoginInput{
+				Email:           "andi@acme.com",
+				CurrentPassword: "P@ssw0rd!",
+				NewPassword:     "N3wP@ss!",
+			}); err != nil {
+				log.Fatal(err)
+			}
+			session, err = client.Login(ctx, authsdk.LoginInput{
+				Email: "andi@acme.com", Password: "N3wP@ss!",
+			})
+		}
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 
 	claims, err := client.VerifyAccessToken(ctx, session.AccessToken)
@@ -138,7 +148,9 @@ func main() {
 }
 ```
 
-Keep `AUTH_API_KEY` on your **backend/BFF** (not in the browser). When Auth Service policy `require_client_api_key` is enabled (default true), register/login/forgot/verify/reset are rejected without a key bound to the same `application_service`.
+Keep `AUTH_API_KEY` on your **backend/BFF** (not in the browser). When Auth Service policy `require_client_api_key` is enabled (default true), register/login/forgot/verify/reset/**first-login** are rejected without a key bound to the same `application_service`.
+
+When Nuts creates an `app_user` with a temp password (`last_login` null), `Login` returns `FirstLoginError` (`IsFirstLogin`). Call `FirstLogin` then `Login` again — no JWT is issued until the password is changed.
 
 ### Example smoke
 
@@ -161,3 +173,4 @@ go run .
 | `APPLICATION_SERVICE` | yes | Technical service name (max 32) |
 | `AUTH_API_KEY` | yes | Client key `sa_*` |
 | `AUTH_EMAIL` / `AUTH_PASSWORD` | for login demos | End-user credentials |
+| `AUTH_NEW_PASSWORD` | first-login smoke | New password when Login returns first-login gate |
