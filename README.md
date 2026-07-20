@@ -172,7 +172,11 @@ _ = reg.HandleFunc("GET /notes/{id}", notesGet)
 http.ListenAndServe(":8080", reg)
 
 discovered := routes.WithScopes(reg.Routes(), "GET", "/notes", "notes:read")
-_, _ = client.ImportEndpoints(ctx, discovered) // conflict_policy=skip by default
+_, _ = client.ImportEndpoints(ctx, discovered) // conflict_policy=skip, sync_mode=additive
+// After a complete collect (not partial boot):
+// _, _ = client.ImportEndpoints(ctx, discovered, authsdk.WithConflictPolicy("update"), authsdk.WithSyncMode(authsdk.SyncModeMarkStale))
+// Explicit prune (CI/CLI only — do not call on every process start):
+// _, _ = client.ImportEndpoints(ctx, discovered, authsdk.WithSyncMode(authsdk.SyncModePrune))
 // or: client.SyncHTTPRoutes(ctx, reg, authsdk.WithConflictPolicy("update"))
 
 // Echo (separate module — only if you use Echo):
@@ -183,6 +187,16 @@ _, _ = client.ImportEndpoints(ctx, discovered) // conflict_policy=skip by defaul
 //   go get github.com/hinha/auth-sdks/go/routes/gin@latest
 // _, _ = client.ImportEndpoints(ctx, ginadapter.Collect(engine))
 ```
+
+`sync_mode` orphan handling (only `source=sdk` rows):
+
+| Mode | Behavior |
+|---|---|
+| `additive` (default) | create/update only |
+| `mark_stale` | missing SDK routes → `status=inactive` + `stale_at` |
+| `prune` | missing SDK routes → soft-delete |
+
+CMS-created endpoints stay `source=cms` and are never pruned by the SDK.
 
 Auth Service endpoint: `POST /v1/consumer-auth/endpoints/import`.
 

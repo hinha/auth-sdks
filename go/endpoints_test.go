@@ -22,15 +22,18 @@ func TestImportEndpoints(t *testing.T) {
 		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
 		assert.Equal(t, "memoo", body["application_service"])
 		assert.Equal(t, "skip", body["conflict_policy"])
+		assert.Equal(t, "mark_stale", body["sync_mode"])
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"message": "ok",
 			"code":    "200",
 			"data": map[string]any{
-				"created": 1,
-				"updated": 0,
-				"skipped": 0,
-				"failed":  0,
+				"created":      1,
+				"updated":      0,
+				"skipped":      0,
+				"failed":       0,
+				"marked_stale": 1,
+				"pruned":       0,
 				"items": []map[string]any{
 					{"method": "GET", "path": "/notes", "status": "created", "id": 9},
 				},
@@ -48,11 +51,10 @@ func TestImportEndpoints(t *testing.T) {
 
 	out, err := client.ImportEndpoints(context.Background(), []routes.Route{
 		{Method: "GET", Path: "/notes", Name: "list_notes"},
-	})
+	}, authsdk.WithSyncMode(authsdk.SyncModeMarkStale))
 	require.NoError(t, err)
 	assert.Equal(t, 1, out.Created)
-	require.Len(t, out.Items, 1)
-	assert.Equal(t, "created", out.Items[0].Status)
+	assert.Equal(t, 1, out.MarkedStale)
 }
 
 func TestSyncHTTPRoutes(t *testing.T) {
