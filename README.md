@@ -73,6 +73,7 @@ go test ./... -cover
 - `AuthorizeAction` hybrid RBAC
 - Lifecycle: register / verify-email / password flows
 - Machine path: API key verify + authorize-endpoint
+- **Route discovery → bulk import**: collect HTTP routes (stdlib registry / Echo / Gin) and `ImportEndpoints` into Auth Service
 
 ### Design patterns
 
@@ -151,6 +152,39 @@ func main() {
 Keep `AUTH_API_KEY` on your **backend/BFF** (not in the browser). When Auth Service policy `require_client_api_key` is enabled (default true), register/login/forgot/verify/reset/**first-login** are rejected without a key bound to the same `application_service`.
 
 When Nuts creates an `app_user` with a temp password (`last_login` null), `Login` returns `FirstLoginError` (`IsFirstLogin`). Call `FirstLogin` then `Login` again — no JWT is issued until the password is changed.
+
+### Sync routes → Auth Service endpoints
+
+Register routes, then bulk-import them as `consumer_endpoints` (sa_*):
+
+```go
+import (
+	authsdk "github.com/hinha/auth-sdks/go"
+	"github.com/hinha/auth-sdks/go/routes"
+	echoadapter "github.com/hinha/auth-sdks/go/routes/echo" // optional
+	ginadapter "github.com/hinha/auth-sdks/go/routes/gin"   // optional
+)
+
+// net/http (Go 1.22+ patterns) — ServeMux has no public route list, use Registry:
+reg := routes.NewRegistry()
+_ = reg.HandleFunc("GET /notes", notesList)
+_ = reg.HandleFunc("GET /notes/{id}", notesGet)
+http.ListenAndServe(":8080", reg)
+
+discovered := routes.WithScopes(reg.Routes(), "GET", "/notes", "notes:read")
+_, _ = client.ImportEndpoints(ctx, discovered) // conflict_policy=skip by default
+// or: client.SyncHTTPRoutes(ctx, reg, authsdk.WithConflictPolicy("update"))
+
+// Echo (separate module — only if you use Echo):
+//   go get github.com/hinha/auth-sdks/go/routes/echo@latest
+// _, _ = client.ImportEndpoints(ctx, echoadapter.Collect(e))
+
+// Gin (separate module — only if you use Gin):
+//   go get github.com/hinha/auth-sdks/go/routes/gin@latest
+// _, _ = client.ImportEndpoints(ctx, ginadapter.Collect(engine))
+```
+
+Auth Service endpoint: `POST /v1/consumer-auth/endpoints/import`.
 
 ### Example smoke
 
