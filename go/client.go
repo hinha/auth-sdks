@@ -27,6 +27,10 @@ type Client struct {
 	api    *api.Requester
 	jwks   *jwksCache
 	prefix string
+
+	// audit is the optional entitlement audit event producer (WithNATS).
+	// nil when disabled; every method on it is nil-safe.
+	audit *entitlementAuditProducer
 }
 
 // New constructs a Client bound to baseURL + applicationService + client API key.
@@ -115,7 +119,19 @@ func New(baseURL, applicationService string, opts ...Option) (*Client, error) {
 		},
 	}
 	c.jwks = newJWKSCache(c, cfg.JWKSCacheTTL)
+	c.audit = newEntitlementAuditProducer(o.nats, logger)
 	return c, nil
+}
+
+// Close releases resources held by the Client, notably the optional NATS
+// entitlement-audit connection (WithNATS). Safe to call even when NATS is
+// disabled. New does not require a matching Close for HTTP-only usage.
+func (c *Client) Close() error {
+	if c == nil {
+		return nil
+	}
+	c.audit.close()
+	return nil
 }
 
 // ApplicationService returns the bound technical service name.
