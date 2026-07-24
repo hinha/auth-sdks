@@ -98,7 +98,7 @@ type Claims struct {
 // MachineVerifyResult is returned by VerifyAPIKey.
 type MachineVerifyResult map[string]any
 
-// AuthorizeEndpointInput checks machine endpoint access.
+// AuthorizeEndpointInput checks endpoint access (machine key or JWT).
 type AuthorizeEndpointInput struct {
 	Method string
 	Path   string
@@ -106,6 +106,13 @@ type AuthorizeEndpointInput struct {
 
 // AuthorizeEndpointResult is the endpoint allow/deny decision.
 type AuthorizeEndpointResult struct {
-	Allowed bool   `json:"allowed"`
-	Reason  string `json:"reason"`
+	Allowed             bool     `json:"allowed"`
+	Reason              string   `json:"reason"`
+	EndpointID          uint     `json:"endpoint_id,omitempty"`
+	MatchedPath         string   `json:"matched_path,omitempty"`
+	RequiredScopes      []string `json:"required_scopes,omitempty"`
+	GrantedScopes       []string `json:"granted_scopes,omitempty"`
+	RequiredPermissions []string `json:"required_permissions,omitempty"`
+	GrantedPermissions  []string `json:"granted_permissions,omitempty"`
+	Plan                string   `json:"plan,omitempty"`
 }
