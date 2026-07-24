@@ -2,7 +2,6 @@ package authsdk
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -77,6 +76,8 @@ type OfferPlan struct {
 	Status               string         `json:"status"`
 	// Purchasable gates SelectPlan for this plan (default true when omitted).
 	Purchasable bool `json:"purchasable"`
+	// Stock is enrollment inventory. nil = unlimited; 0 = out of stock.
+	Stock *int `json:"stock"`
 }
 
 // ListOfferPlansOption configures ListOfferPlans.
@@ -179,54 +180,14 @@ type PlanSummary struct {
 	AllowPlanUpgrade bool `json:"allow_plan_upgrade"`
 }
 
-// PlanSoldOut reports whether every numeric limit is 0 (at least one numeric
-// limit present). Null/non-numeric values are ignored (unlimited / non-quota).
-func PlanSoldOut(limits map[string]any) bool {
-	if len(limits) == 0 {
-		return false
-	}
-	numeric := 0
-	for _, raw := range limits {
-		if raw == nil {
-			continue
-		}
-		switch v := raw.(type) {
-		case float64:
-			numeric++
-			if v != 0 {
-				return false
-			}
-		case float32:
-			numeric++
-			if v != 0 {
-				return false
-			}
-		case int:
-			numeric++
-			if v != 0 {
-				return false
-			}
-		case int64:
-			numeric++
-			if v != 0 {
-				return false
-			}
-		case json.Number:
-			f, err := v.Float64()
-			if err != nil {
-				continue
-			}
-			numeric++
-			if f != 0 {
-				return false
-			}
-		}
-	}
-	return numeric > 0
+// PlanOutOfStock reports whether enrollment stock is explicitly zero.
+// nil stock means unlimited (not gated).
+func PlanOutOfStock(stock *int) bool {
+	return stock != nil && *stock == 0
 }
 
 // CanSelectPlan reports whether a consumer may select the offer under the
-// service gate, plan purchasable flag, active status, and sold-out rule.
+// service gate, plan purchasable flag, active status, and stock rule.
 func CanSelectPlan(allowPlanUpgrade bool, offer OfferPlan) bool {
 	if !allowPlanUpgrade {
 		return false
@@ -237,7 +198,7 @@ func CanSelectPlan(allowPlanUpgrade bool, offer OfferPlan) bool {
 	if !offer.Purchasable {
 		return false
 	}
-	if PlanSoldOut(offer.Limits) {
+	if PlanOutOfStock(offer.Stock) {
 		return false
 	}
 	return true

@@ -96,10 +96,11 @@ func TestListOfferPlans_WithBearer(t *testing.T) {
 				"name":                   "Free",
 				"status":                 "active",
 				"purchasable":            true,
+				"stock":                  10,
 				"limits":                 map[string]any{"sqlite_db_count": 1.0},
 				"features":               map[string]any{"beta_ui": false},
 			},
-			{"id": 2, "code": "pro", "name": "Pro", "status": "active", "purchasable": false},
+			{"id": 2, "code": "pro", "name": "Pro", "status": "active", "purchasable": false, "stock": 0},
 		})
 	})
 
@@ -116,6 +117,12 @@ func TestListOfferPlans_WithBearer(t *testing.T) {
 	}
 	if !out[0].Purchasable || out[1].Purchasable {
 		t.Fatalf("purchasable free=%v pro=%v", out[0].Purchasable, out[1].Purchasable)
+	}
+	if out[0].Stock == nil || *out[0].Stock != 10 {
+		t.Fatalf("stock free=%v", out[0].Stock)
+	}
+	if out[1].Stock == nil || *out[1].Stock != 0 {
+		t.Fatalf("stock pro=%v", out[1].Stock)
 	}
 }
 
@@ -307,33 +314,23 @@ func TestSelectPlan_ValidationError(t *testing.T) {
 	}
 }
 
-func TestPlanSoldOut(t *testing.T) {
+func TestPlanOutOfStock(t *testing.T) {
 	t.Parallel()
-	cases := []struct {
-		name   string
-		limits map[string]any
-		want   bool
-	}{
-		{name: "nil", limits: nil, want: false},
-		{name: "empty", limits: map[string]any{}, want: false},
-		{name: "all_zero", limits: map[string]any{"rpm": 0.0, "quota": 0.0}, want: true},
-		{name: "one_nonzero", limits: map[string]any{"rpm": 0.0, "quota": 5.0}, want: false},
-		{name: "null_only", limits: map[string]any{"rpm": nil}, want: false},
-		{name: "zero_plus_null", limits: map[string]any{"rpm": 0.0, "feat": nil}, want: true},
-		{name: "int_zero", limits: map[string]any{"rpm": 0}, want: true},
+	if PlanOutOfStock(nil) {
+		t.Fatal("nil stock is unlimited")
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := PlanSoldOut(tc.limits); got != tc.want {
-				t.Fatalf("got=%v want=%v", got, tc.want)
-			}
-		})
+	zero, one := 0, 1
+	if !PlanOutOfStock(&zero) {
+		t.Fatal("stock 0 should be out of stock")
+	}
+	if PlanOutOfStock(&one) {
+		t.Fatal("stock >0 should not be out of stock")
 	}
 }
 
 func TestCanSelectPlan(t *testing.T) {
 	t.Parallel()
-	base := OfferPlan{Code: "pro", Status: "active", Purchasable: true, Limits: map[string]any{"rpm": 10.0}}
+	base := OfferPlan{Code: "gold", Status: "active", Purchasable: true}
 	if !CanSelectPlan(true, base) {
 		t.Fatal("expected selectable")
 	}
@@ -350,14 +347,22 @@ func TestCanSelectPlan(t *testing.T) {
 	if CanSelectPlan(true, inactive) {
 		t.Fatal("inactive should block")
 	}
-	soldOut := base
-	soldOut.Limits = map[string]any{"rpm": 0.0, "quota": 0.0}
-	if CanSelectPlan(true, soldOut) {
-		t.Fatal("sold out should block")
+	zero := 0
+	outOfStock := base
+	outOfStock.Stock = &zero
+	if CanSelectPlan(true, outOfStock) {
+		t.Fatal("stock 0 should block")
 	}
-	partial := base
-	partial.Limits = map[string]any{"rpm": 0.0, "quota": 3.0}
-	if !CanSelectPlan(true, partial) {
-		t.Fatal("partial zero should still allow select")
+	one := 1
+	withStock := base
+	withStock.Stock = &one
+	if !CanSelectPlan(true, withStock) {
+		t.Fatal("stock >0 should allow select")
+	}
+	// Benefit limits of 0 must not gate selection.
+	withLimits := base
+	withLimits.Limits = map[string]any{"rpm": 0.0, "quota": 0.0}
+	if !CanSelectPlan(true, withLimits) {
+		t.Fatal("zero benefit limits should not block")
 	}
 }
