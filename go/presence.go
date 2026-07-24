@@ -69,9 +69,10 @@ type presencePublisher struct {
 	log     logging.Logger
 	started time.Time
 
-	mu     sync.Mutex
-	cancel context.CancelFunc
-	wg     sync.WaitGroup
+	mu         sync.Mutex
+	cancel     context.CancelFunc
+	wg         sync.WaitGroup
+	firstOKLog sync.Once
 }
 
 func newPresencePublisher(bus *natsBus, applicationService string, log logging.Logger) *presencePublisher {
@@ -175,9 +176,19 @@ func (p *presencePublisher) publishOnce(ctx context.Context) {
 		return
 	}
 	if err := p.bus.publish(ctx, p.subject, raw, ev.EventID); err != nil {
-		logging.Warn(ctx, p.log, "presence_publish_failed", logging.Err(err))
+		logging.Warn(ctx, p.log, "presence_publish_failed",
+			logging.String("subject", p.subject),
+			logging.Err(err),
+		)
 		return
 	}
+	p.firstOKLog.Do(func() {
+		logging.Info(ctx, p.log, "presence_published",
+			logging.String("subject", p.subject),
+			logging.String("instance_id", ev.InstanceID),
+			logging.String("application_service", ev.ApplicationService),
+		)
+	})
 	logging.Debug(ctx, p.log, "presence_published",
 		logging.String("instance_id", ev.InstanceID),
 		logging.String("application_service", ev.ApplicationService),
