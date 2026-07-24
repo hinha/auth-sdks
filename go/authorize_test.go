@@ -19,7 +19,10 @@ func TestAuthorizeAction_Variants(t *testing.T) {
 
 		switch {
 		case auth == "Bearer user-jwt":
-			requireAPIKey(t, r)
+			// JWT path must not also send machine X-API-Key (Auth prefers it → 400).
+			if apiKey != "" {
+				t.Fatalf("unexpected X-API-Key on JWT path: %q", apiKey)
+			}
 		case apiKey == "sa_override":
 			if auth != "Bearer sa_override" {
 				t.Fatalf("auth=%q", auth)

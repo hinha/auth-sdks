@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/url"
+	"strings"
 
 	"github.com/hinha/auth-sdks/go/internal/api"
 )
@@ -89,6 +90,114 @@ type MyUsageResult struct {
 	PlanCode           string           `json:"plan_code"`
 	PlanName           string           `json:"plan_name"`
 	Meters             []UsageMeterItem `json:"meters"`
+}
+
+// Usage reservation statuses returned by Reserve/Confirm/Release.
+const (
+	UsageReservationStatusReserved  = "reserved"
+	UsageReservationStatusConfirmed = "confirmed"
+	UsageReservationStatusReleased  = "released"
+	UsageReservationStatusExpired   = "expired"
+)
+
+// ReserveUsageInput holds a quota hold before a local resource commit
+// (Reserve→TX→Confirm). IdempotencyKey must be stable across retries of the
+// same business operation.
+type ReserveUsageInput struct {
+	SubjectType    string  `json:"subject_type,omitempty"`
+	SubjectID      string  `json:"subject_id,omitempty"`
+	DimensionKey   string  `json:"dimension_key"`
+	Delta          float64 `json:"delta"`
+	IdempotencyKey string  `json:"idempotency_key"`
+	PeriodKey      string  `json:"period_key,omitempty"`
+	ResourceRef    string  `json:"resource_ref,omitempty"`
+	TTLSeconds     int     `json:"ttl_seconds,omitempty"`
+}
+
+// ConfirmUsageInput finalizes a reservation and increments the usage meter.
+type ConfirmUsageInput struct {
+	ReservationID string `json:"reservation_id"`
+}
+
+// ReleaseUsageInput drops a reserved hold without metering (local TX failed).
+type ReleaseUsageInput struct {
+	ReservationID string `json:"reservation_id"`
+}
+
+// UsageReservation is the Auth Service reservation row returned by
+// Reserve/Confirm/Release.
+type UsageReservation struct {
+	ReservationID  string  `json:"reservation_id"`
+	Status         string  `json:"status"`
+	SubjectType    string  `json:"subject_type"`
+	SubjectID      string  `json:"subject_id"`
+	DimensionKey   string  `json:"dimension_key"`
+	Delta          float64 `json:"delta"`
+	PeriodKey      string  `json:"period_key"`
+	IdempotencyKey string  `json:"idempotency_key"`
+	ExpiresAt      string  `json:"expires_at,omitempty"`
+	ResourceRef    string  `json:"resource_ref,omitempty"`
+}
+
+// ReserveUsage creates a quota hold via POST /v1/consumer-auth/usage/reserve
+// (sa_* machine key). Empty apiKey uses the client Credentials key.
+func (c *Client) ReserveUsage(ctx context.Context, apiKey string, in ReserveUsageInput) (*UsageReservation, error) {
+	if apiKey == "" {
+		apiKey = c.cfg.APIKey
+	}
+	if strings.TrimSpace(in.IdempotencyKey) == "" || strings.TrimSpace(in.DimensionKey) == "" || in.Delta <= 0 {
+		return nil, &ValidationError{APIError: &APIError{
+			StatusCode: http.StatusBadRequest,
+			Code:       "400",
+			Message:    "dimension_key, delta>0, and idempotency_key are required",
+		}}
+	}
+	var out UsageReservation
+	err := c.api.DoJSON(ctx, http.MethodPost, c.path("/usage/reserve"), in, &out, api.WithAPIKey(apiKey))
+	if err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// ConfirmUsage finalizes a reservation via POST /v1/consumer-auth/usage/confirm.
+func (c *Client) ConfirmUsage(ctx context.Context, apiKey string, in ConfirmUsageInput) (*UsageReservation, error) {
+	if apiKey == "" {
+		apiKey = c.cfg.APIKey
+	}
+	if strings.TrimSpace(in.ReservationID) == "" {
+		return nil, &ValidationError{APIError: &APIError{
+			StatusCode: http.StatusBadRequest,
+			Code:       "400",
+			Message:    "reservation_id is required",
+		}}
+	}
+	var out UsageReservation
+	err := c.api.DoJSON(ctx, http.MethodPost, c.path("/usage/confirm"), in, &out, api.WithAPIKey(apiKey))
+	if err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// ReleaseUsage drops a reserved hold via POST /v1/consumer-auth/usage/release.
+func (c *Client) ReleaseUsage(ctx context.Context, apiKey string, in ReleaseUsageInput) (*UsageReservation, error) {
+	if apiKey == "" {
+		apiKey = c.cfg.APIKey
+	}
+	if strings.TrimSpace(in.ReservationID) == "" {
+		return nil, &ValidationError{APIError: &APIError{
+			StatusCode: http.StatusBadRequest,
+			Code:       "400",
+			Message:    "reservation_id is required",
+		}}
+	}
+	var out UsageReservation
+	err := c.api.DoJSON(ctx, http.MethodPost, c.path("/usage/release"), in, &out, api.WithAPIKey(apiKey))
+	if err != nil {
+		return nil, err
+	}
+	return &out, nil
 }
 
 // GetMyUsage resolves the caller's (or an administered organization's) usage

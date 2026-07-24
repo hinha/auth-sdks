@@ -39,9 +39,11 @@ func (c *Client) authorizeAction(ctx context.Context, bearer, apiKey string, in 
 
 	var opts []api.CallOption
 	if bearer != "" {
+		// Consumer JWT path: do NOT also attach MachineAPIKey. Auth Service
+		// prefers X-API-Key over Authorization and then requires body user_id
+		// (→ 400 user_id_required), breaking Allow/AuthorizeAction probes.
 		opts = append(opts, api.WithBearer(bearer))
-	}
-	if apiKey != "" {
+	} else if apiKey != "" {
 		opts = append(opts, api.WithAPIKey(apiKey))
 	} else {
 		opts = c.withClientKey(opts...)
