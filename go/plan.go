@@ -2,6 +2,7 @@ package authsdk
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -74,6 +75,8 @@ type OfferPlan struct {
 	Limits               map[string]any `json:"limits,omitempty"`
 	Features             map[string]any `json:"features,omitempty"`
 	Status               string         `json:"status"`
+	// Purchasable gates SelectPlan for this plan (default true when omitted).
+	Purchasable bool `json:"purchasable"`
 }
 
 // ListOfferPlansOption configures ListOfferPlans.
@@ -172,6 +175,72 @@ type PlanSummary struct {
 	PlanCode           string            `json:"plan_code"`
 	PlanName           string            `json:"plan_name"`
 	Organization       *PlanOrganization `json:"organization,omitempty"`
+	// AllowPlanUpgrade mirrors the service auth-policy gate for SelectPlan.
+	AllowPlanUpgrade bool `json:"allow_plan_upgrade"`
+}
+
+// PlanSoldOut reports whether every numeric limit is 0 (at least one numeric
+// limit present). Null/non-numeric values are ignored (unlimited / non-quota).
+func PlanSoldOut(limits map[string]any) bool {
+	if len(limits) == 0 {
+		return false
+	}
+	numeric := 0
+	for _, raw := range limits {
+		if raw == nil {
+			continue
+		}
+		switch v := raw.(type) {
+		case float64:
+			numeric++
+			if v != 0 {
+				return false
+			}
+		case float32:
+			numeric++
+			if v != 0 {
+				return false
+			}
+		case int:
+			numeric++
+			if v != 0 {
+				return false
+			}
+		case int64:
+			numeric++
+			if v != 0 {
+				return false
+			}
+		case json.Number:
+			f, err := v.Float64()
+			if err != nil {
+				continue
+			}
+			numeric++
+			if f != 0 {
+				return false
+			}
+		}
+	}
+	return numeric > 0
+}
+
+// CanSelectPlan reports whether a consumer may select the offer under the
+// service gate, plan purchasable flag, active status, and sold-out rule.
+func CanSelectPlan(allowPlanUpgrade bool, offer OfferPlan) bool {
+	if !allowPlanUpgrade {
+		return false
+	}
+	if offer.Status != "" && offer.Status != "active" {
+		return false
+	}
+	if !offer.Purchasable {
+		return false
+	}
+	if PlanSoldOut(offer.Limits) {
+		return false
+	}
+	return true
 }
 
 // GetMyPlan resolves the caller's active plan via GET /v1/consumer-auth/me/plan.

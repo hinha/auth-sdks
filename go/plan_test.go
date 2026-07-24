@@ -95,10 +95,11 @@ func TestListOfferPlans_WithBearer(t *testing.T) {
 				"code":                   "free",
 				"name":                   "Free",
 				"status":                 "active",
+				"purchasable":            true,
 				"limits":                 map[string]any{"sqlite_db_count": 1.0},
 				"features":               map[string]any{"beta_ui": false},
 			},
-			{"id": 2, "code": "pro", "name": "Pro", "status": "active"},
+			{"id": 2, "code": "pro", "name": "Pro", "status": "active", "purchasable": false},
 		})
 	})
 
@@ -112,6 +113,9 @@ func TestListOfferPlans_WithBearer(t *testing.T) {
 	}
 	if out[0].Limits["sqlite_db_count"] != 1.0 {
 		t.Fatalf("limits=%v", out[0].Limits)
+	}
+	if !out[0].Purchasable || out[1].Purchasable {
+		t.Fatalf("purchasable free=%v pro=%v", out[0].Purchasable, out[1].Purchasable)
 	}
 }
 
@@ -197,6 +201,7 @@ func TestGetMyPlan(t *testing.T) {
 			"plan_id":             1,
 			"plan_code":           "free",
 			"plan_name":           "Free",
+			"allow_plan_upgrade":  true,
 			"organization": map[string]any{
 				"id":     3,
 				"name":   "Acme Corp",
@@ -213,6 +218,9 @@ func TestGetMyPlan(t *testing.T) {
 	}
 	if out.PlanCode != "free" || out.SubjectType != "organization" || out.SubjectID != "3" {
 		t.Fatalf("out=%+v", out)
+	}
+	if !out.AllowPlanUpgrade {
+		t.Fatalf("allow_plan_upgrade=%v", out.AllowPlanUpgrade)
 	}
 	if out.Organization == nil || out.Organization.Name != "Acme Corp" || out.Organization.Slug != "acme-corp" {
 		t.Fatalf("organization=%+v", out.Organization)
@@ -296,5 +304,60 @@ func TestSelectPlan_ValidationError(t *testing.T) {
 
 	if _, err := client.SelectPlan(context.Background(), "user-jwt", SelectPlanInput{PlanCode: "nope"}); !IsValidation(err) {
 		t.Fatalf("err=%v", err)
+	}
+}
+
+func TestPlanSoldOut(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name   string
+		limits map[string]any
+		want   bool
+	}{
+		{name: "nil", limits: nil, want: false},
+		{name: "empty", limits: map[string]any{}, want: false},
+		{name: "all_zero", limits: map[string]any{"rpm": 0.0, "quota": 0.0}, want: true},
+		{name: "one_nonzero", limits: map[string]any{"rpm": 0.0, "quota": 5.0}, want: false},
+		{name: "null_only", limits: map[string]any{"rpm": nil}, want: false},
+		{name: "zero_plus_null", limits: map[string]any{"rpm": 0.0, "feat": nil}, want: true},
+		{name: "int_zero", limits: map[string]any{"rpm": 0}, want: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := PlanSoldOut(tc.limits); got != tc.want {
+				t.Fatalf("got=%v want=%v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestCanSelectPlan(t *testing.T) {
+	t.Parallel()
+	base := OfferPlan{Code: "pro", Status: "active", Purchasable: true, Limits: map[string]any{"rpm": 10.0}}
+	if !CanSelectPlan(true, base) {
+		t.Fatal("expected selectable")
+	}
+	if CanSelectPlan(false, base) {
+		t.Fatal("service gate should block")
+	}
+	blocked := base
+	blocked.Purchasable = false
+	if CanSelectPlan(true, blocked) {
+		t.Fatal("purchasable=false should block")
+	}
+	inactive := base
+	inactive.Status = "inactive"
+	if CanSelectPlan(true, inactive) {
+		t.Fatal("inactive should block")
+	}
+	soldOut := base
+	soldOut.Limits = map[string]any{"rpm": 0.0, "quota": 0.0}
+	if CanSelectPlan(true, soldOut) {
+		t.Fatal("sold out should block")
+	}
+	partial := base
+	partial.Limits = map[string]any{"rpm": 0.0, "quota": 3.0}
+	if !CanSelectPlan(true, partial) {
+		t.Fatal("partial zero should still allow select")
 	}
 }
