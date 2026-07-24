@@ -153,15 +153,25 @@ func credentialCallOption(credential string) api.CallOption {
 	return api.WithBearer(raw)
 }
 
+// PlanOrganization is the organization identity attached to a plan summary
+// when subject_type=organization.
+type PlanOrganization struct {
+	ID     uint   `json:"id"`
+	Name   string `json:"name"`
+	Slug   string `json:"slug"`
+	Status string `json:"status"`
+}
+
 // PlanSummary is the consumer-facing plan/subscription summary returned by
 // GetMyPlan and SelectPlan (mirrors Auth Service domains.ConsumerPlanSummary).
 type PlanSummary struct {
-	ApplicationService string `json:"application_service"`
-	SubjectType        string `json:"subject_type"`
-	SubjectID          string `json:"subject_id"`
-	PlanID             uint   `json:"plan_id"`
-	PlanCode           string `json:"plan_code"`
-	PlanName           string `json:"plan_name"`
+	ApplicationService string            `json:"application_service"`
+	SubjectType        string            `json:"subject_type"`
+	SubjectID          string            `json:"subject_id"`
+	PlanID             uint              `json:"plan_id"`
+	PlanCode           string            `json:"plan_code"`
+	PlanName           string            `json:"plan_name"`
+	Organization       *PlanOrganization `json:"organization,omitempty"`
 }
 
 // GetMyPlan resolves the caller's active plan via GET /v1/consumer-auth/me/plan.

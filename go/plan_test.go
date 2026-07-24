@@ -197,6 +197,12 @@ func TestGetMyPlan(t *testing.T) {
 			"plan_id":             1,
 			"plan_code":           "free",
 			"plan_name":           "Free",
+			"organization": map[string]any{
+				"id":     3,
+				"name":   "Acme Corp",
+				"slug":   "acme-corp",
+				"status": "active",
+			},
 		})
 	})
 
@@ -207,6 +213,9 @@ func TestGetMyPlan(t *testing.T) {
 	}
 	if out.PlanCode != "free" || out.SubjectType != "organization" || out.SubjectID != "3" {
 		t.Fatalf("out=%+v", out)
+	}
+	if out.Organization == nil || out.Organization.Name != "Acme Corp" || out.Organization.Slug != "acme-corp" {
+		t.Fatalf("organization=%+v", out.Organization)
 	}
 }
 
