@@ -16,12 +16,16 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-// UsageReserver is the Auth HTTP surface quotaorm needs (satisfied by *authsdk.Client).
-type UsageReserver interface {
+// UsageClient is the Auth HTTP surface quotaorm needs (satisfied by *authsdk.Client).
+type UsageClient interface {
 	ReserveUsage(ctx context.Context, apiKey string, in authsdk.ReserveUsageInput) (*authsdk.UsageReservation, error)
 	ConfirmUsage(ctx context.Context, apiKey string, in authsdk.ConfirmUsageInput) (*authsdk.UsageReservation, error)
 	ReleaseUsage(ctx context.Context, apiKey string, in authsdk.ReleaseUsageInput) (*authsdk.UsageReservation, error)
+	ReportUsage(ctx context.Context, apiKey string, in authsdk.ReportUsageInput) ([]authsdk.UsageMeter, error)
 }
+
+// UsageReserver is kept as an alias for older call sites / mocks.
+type UsageReserver = UsageClient
 
 // Mutation describes one quota hold tied to a local business write.
 type Mutation struct {
@@ -39,9 +43,9 @@ type Mutation struct {
 
 // Manager owns AutoMigrate, RunQuotaMutation, and the outbox worker.
 type Manager struct {
-	client UsageReserver
+	client UsageClient
 	db     *gorm.DB
-	apiKey string // default from client if UsageReserver is *authsdk.Client — set via New options
+	apiKey string // default sa_* key — set via WithAPIKey
 
 	workerID    string
 	maxAttempts int
@@ -65,9 +69,9 @@ func WithWorkerID(id string) Option {
 }
 
 // New binds an Auth usage client and the consumer *gorm.DB.
-func New(client UsageReserver, db *gorm.DB, opts ...Option) (*Manager, error) {
+func New(client UsageClient, db *gorm.DB, opts ...Option) (*Manager, error) {
 	if client == nil {
-		return nil, errors.New("quotaorm: nil UsageReserver")
+		return nil, errors.New("quotaorm: nil UsageClient")
 	}
 	if db == nil {
 		return nil, errors.New("quotaorm: nil *gorm.DB")
@@ -80,10 +84,6 @@ func New(client UsageReserver, db *gorm.DB, opts ...Option) (*Manager, error) {
 		batchSize:   32,
 		pollEvery:   2 * time.Second,
 		lockTTL:     30 * time.Second,
-	}
-	if c, ok := client.(*authsdk.Client); ok {
-		// Client does not expose APIKey; consumers should WithAPIKey or pass Mutation.APIKey.
-		_ = c
 	}
 	for _, opt := range opts {
 		opt(m)
@@ -134,12 +134,13 @@ func (m *Manager) RunQuotaMutation(ctx context.Context, mut Mutation, fn func(tx
 		"api_key_set":     apiKey != "",
 	})
 
+	outboxID := uuid.NewString()
 	txErr := m.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := fn(tx); err != nil {
 			return err
 		}
 		row := QuotaOutbox{
-			ID:             uuid.NewString(),
+			ID:             outboxID,
 			EventID:        "confirm:" + res.ReservationID,
 			Action:         outboxActionConfirm,
 			ReservationID:  res.ReservationID,
@@ -154,6 +155,41 @@ func (m *Manager) RunQuotaMutation(ctx context.Context, mut Mutation, fn func(tx
 			return fmt.Errorf("quotaorm: local tx failed (%v); release also failed: %w", txErr, relErr)
 		}
 		return txErr
+	}
+
+	// Best-effort sync Confirm so meters update immediately; outbox covers Auth-down.
+	if _, cErr := m.client.ConfirmUsage(ctx, apiKey, authsdk.ConfirmUsageInput{ReservationID: res.ReservationID}); cErr == nil {
+		now := time.Now().UTC()
+		_ = m.db.WithContext(ctx).Model(&QuotaOutbox{}).Where("id = ?", outboxID).Updates(map[string]any{
+			"published_at": now,
+			"locked_by":    nil,
+			"locked_at":    nil,
+		}).Error
+	}
+	return nil
+}
+
+// ReconcileSet absolute-sets a gauge dimension (e.g. namespace_count after soft-delete)
+// via ReportUsage mode=set. Use this for deletions; creates stay on Reserve→Confirm.
+func (m *Manager) ReconcileSet(ctx context.Context, subjectType, subjectID, dimension string, value float64) error {
+	if dimension == "" {
+		return errors.New("quotaorm: dimension required")
+	}
+	if value < 0 {
+		return errors.New("quotaorm: value must be >= 0")
+	}
+	apiKey := m.apiKey
+	_, err := m.client.ReportUsage(ctx, apiKey, authsdk.ReportUsageInput{
+		SubjectType: subjectType,
+		SubjectID:   subjectID,
+		Items: []authsdk.UsageReportItem{{
+			DimensionKey: dimension,
+			Value:        value,
+			Mode:         authsdk.UsageReportModeSet,
+		}},
+	})
+	if err != nil {
+		return fmt.Errorf("quotaorm: reconcile set: %w", err)
 	}
 	return nil
 }

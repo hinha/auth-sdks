@@ -18,12 +18,14 @@ import (
 type fakeUsage struct {
 	mu sync.Mutex
 
-	reserveErr  error
-	confirmErr  error
-	releaseErr  error
+	reserveErr   error
+	confirmErr   error
+	releaseErr   error
+	reportErr    error
 	reservations map[string]*authsdk.UsageReservation
-	confirms    []string
-	releases    []string
+	confirms     []string
+	releases     []string
+	reports      []authsdk.ReportUsageInput
 }
 
 func newFakeUsage() *fakeUsage {
@@ -73,6 +75,16 @@ func (f *fakeUsage) ReleaseUsage(_ context.Context, _ string, in authsdk.Release
 	return &authsdk.UsageReservation{ReservationID: in.ReservationID, Status: authsdk.UsageReservationStatusReleased}, nil
 }
 
+func (f *fakeUsage) ReportUsage(_ context.Context, _ string, in authsdk.ReportUsageInput) ([]authsdk.UsageMeter, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.reportErr != nil {
+		return nil, f.reportErr
+	}
+	f.reports = append(f.reports, in)
+	return []authsdk.UsageMeter{}, nil
+}
+
 func openTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open("file:"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{
@@ -110,10 +122,14 @@ func TestRunQuotaMutation_SuccessAndConfirm(t *testing.T) {
 	require.NoError(t, db.Model(&row{}).Count(&count).Error)
 	assert.Equal(t, int64(1), count)
 
-	require.NoError(t, m.ProcessOutboxOnce(context.Background()))
+	// Sync confirm runs inside RunQuotaMutation; outbox should already be published.
 	fake.mu.Lock()
 	assert.Equal(t, []string{"res-ns:1:namespace_count"}, fake.confirms)
 	fake.mu.Unlock()
+
+	var ob QuotaOutbox
+	require.NoError(t, db.Where("action = ?", outboxActionConfirm).First(&ob).Error)
+	assert.NotNil(t, ob.PublishedAt)
 }
 
 func TestRunQuotaMutation_ReserveFailNoWrite(t *testing.T) {
@@ -172,6 +188,7 @@ func TestProcessOutbox_RetryThenDeadLetter(t *testing.T) {
 	m.pollEvery = time.Millisecond
 	require.NoError(t, m.AutoMigrate(context.Background()))
 
+	// Sync confirm fails; outbox stays unpublished for worker retry.
 	require.NoError(t, m.RunQuotaMutation(context.Background(), Mutation{
 		IdempotencyKey: "retry", Dimension: "namespace_count", Delta: 1,
 	}, func(tx *gorm.DB) error { return nil }))
@@ -184,4 +201,79 @@ func TestProcessOutbox_RetryThenDeadLetter(t *testing.T) {
 	var row QuotaOutbox
 	require.NoError(t, db.Where("action = ?", outboxActionConfirm).First(&row).Error)
 	assert.NotNil(t, row.DeadLetteredAt)
+}
+
+func TestReconcileSet(t *testing.T) {
+	db := openTestDB(t)
+	fake := newFakeUsage()
+	m, err := New(fake, db, WithAPIKey("sa_test"))
+	require.NoError(t, err)
+
+	require.NoError(t, m.ReconcileSet(context.Background(), "user", "2", "namespace_count", 3))
+	fake.mu.Lock()
+	require.Len(t, fake.reports, 1)
+	assert.Equal(t, "namespace_count", fake.reports[0].Items[0].DimensionKey)
+	assert.Equal(t, float64(3), fake.reports[0].Items[0].Value)
+	assert.Equal(t, authsdk.UsageReportModeSet, fake.reports[0].Items[0].Mode)
+	fake.mu.Unlock()
+}
+
+func TestChaos_ParallelReserveThenOneTXFails(t *testing.T) {
+	db := openTestDB(t)
+	fake := newFakeUsage()
+	m, err := New(fake, db, WithAPIKey("sa_test"))
+	require.NoError(t, err)
+	require.NoError(t, m.AutoMigrate(context.Background()))
+
+	var wg sync.WaitGroup
+	errs := make(chan error, 2)
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		errs <- m.RunQuotaMutation(context.Background(), Mutation{
+			IdempotencyKey: "p1", Dimension: "namespace_count", Delta: 1, SubjectType: "user", SubjectID: "1",
+		}, func(tx *gorm.DB) error { return nil })
+	}()
+	go func() {
+		defer wg.Done()
+		errs <- m.RunQuotaMutation(context.Background(), Mutation{
+			IdempotencyKey: "p2", Dimension: "namespace_count", Delta: 1, SubjectType: "user", SubjectID: "1",
+		}, func(tx *gorm.DB) error { return errors.New("crash mid-tx") })
+	}()
+	wg.Wait()
+	close(errs)
+
+	var okN, failN int
+	for e := range errs {
+		if e == nil {
+			okN++
+		} else {
+			failN++
+		}
+	}
+	assert.Equal(t, 1, okN)
+	assert.Equal(t, 1, failN)
+
+	fake.mu.Lock()
+	assert.Len(t, fake.confirms, 1)
+	assert.Len(t, fake.releases, 1)
+	fake.mu.Unlock()
+}
+
+func TestChaos_DoubleSubmitSameIdempotency(t *testing.T) {
+	db := openTestDB(t)
+	fake := newFakeUsage()
+	m, err := New(fake, db, WithAPIKey("sa_test"))
+	require.NoError(t, err)
+	require.NoError(t, m.AutoMigrate(context.Background()))
+
+	mut := Mutation{IdempotencyKey: "same", Dimension: "namespace_count", Delta: 1, SubjectType: "user", SubjectID: "1"}
+	require.NoError(t, m.RunQuotaMutation(context.Background(), mut, func(tx *gorm.DB) error { return nil }))
+	// Second call reuses Auth idempotent reserve; local TX + confirm again (idempotent confirm).
+	require.NoError(t, m.RunQuotaMutation(context.Background(), mut, func(tx *gorm.DB) error { return nil }))
+
+	fake.mu.Lock()
+	assert.Len(t, fake.reservations, 1)
+	assert.GreaterOrEqual(t, len(fake.confirms), 1)
+	fake.mu.Unlock()
 }
