@@ -177,7 +177,10 @@ type PlanSummary struct {
 	PlanName           string            `json:"plan_name"`
 	Organization       *PlanOrganization `json:"organization,omitempty"`
 	// AllowPlanUpgrade mirrors the service auth-policy gate for SelectPlan.
-	AllowPlanUpgrade bool `json:"allow_plan_upgrade"`
+	AllowPlanUpgrade bool       `json:"allow_plan_upgrade"`
+	StartsAt         *time.Time `json:"starts_at,omitempty"`
+	EndsAt           *time.Time `json:"ends_at,omitempty"`
+	IsAutoRenew      bool       `json:"is_auto_renew"`
 }
 
 // PlanOutOfStock reports whether enrollment stock is explicitly zero.
@@ -241,12 +244,14 @@ type SelectPlanInput struct {
 	PlanCode    string `json:"plan_code"`
 	SubjectType string `json:"subject_type,omitempty"`
 	SubjectID   string `json:"subject_id,omitempty"`
+	IsAutoRenew *bool  `json:"is_auto_renew,omitempty"`
 }
 
 type selectPlanRequest struct {
 	PlanCode    string `json:"plan_code"`
 	SubjectType string `json:"subject_type,omitempty"`
 	SubjectID   string `json:"subject_id,omitempty"`
+	IsAutoRenew *bool  `json:"is_auto_renew,omitempty"`
 }
 
 // SelectPlan changes the caller's (or an administered organization's) plan
@@ -264,11 +269,37 @@ func (c *Client) SelectPlan(ctx context.Context, accessToken string, in SelectPl
 		PlanCode:    in.PlanCode,
 		SubjectType: in.SubjectType,
 		SubjectID:   in.SubjectID,
+		IsAutoRenew: in.IsAutoRenew,
 	}, &out, api.WithBearer(accessToken))
 	if err != nil {
 		logging.Warn(ctx, c.log, "select_plan_failed", logging.Err(err))
 		return nil, err
 	}
 	logging.Info(ctx, c.log, "select_plan_ok", logging.String("plan_code", out.PlanCode))
+	return &out, nil
+}
+
+// UpdateMyPlanAutoRenewInput toggles is_auto_renew on the active subscription.
+type UpdateMyPlanAutoRenewInput struct {
+	IsAutoRenew bool   `json:"is_auto_renew"`
+	SubjectType string `json:"subject_type,omitempty"`
+	SubjectID   string `json:"subject_id,omitempty"`
+}
+
+// UpdateMyPlanAutoRenew PATCHes /v1/consumer-auth/me/plan/auto-renew.
+func (c *Client) UpdateMyPlanAutoRenew(ctx context.Context, accessToken string, in UpdateMyPlanAutoRenewInput) (*PlanSummary, error) {
+	if accessToken == "" {
+		return nil, &ValidationError{APIError: &APIError{
+			StatusCode: http.StatusUnauthorized,
+			Code:       "401",
+			Message:    "access token required",
+		}}
+	}
+	var out PlanSummary
+	err := c.api.DoJSON(ctx, http.MethodPatch, c.path("/me/plan/auto-renew"), in, &out, api.WithBearer(accessToken))
+	if err != nil {
+		logging.Warn(ctx, c.log, "update_plan_auto_renew_failed", logging.Err(err))
+		return nil, err
+	}
 	return &out, nil
 }
