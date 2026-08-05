@@ -60,9 +60,21 @@ type FailInput struct {
 	Retryable bool   `json:"retryable"`
 }
 
-// envelope matches task-hub response.Response.
-type envelope struct {
-	Message string          `json:"message"`
-	Data    json.RawMessage `json:"data"`
-	Code    string          `json:"code"`
+// ListTasksInput filters GET /v1/tasks.
+type ListTasksInput struct {
+	Queue        string     `json:"-"`
+	State        string     `json:"-"`
+	OwnerService string     `json:"-"`
+	OwnerUserID  *uint      `json:"-"`
+	CreatedSince *time.Time `json:"-"`
+	Limit        int        `json:"-"`
+	Offset       int        `json:"-"`
+}
+
+// ListTasksResult is a page of tasks plus total count.
+type ListTasksResult struct {
+	Tasks []Task `json:"tasks"`
+	Total int64  `json:"total"`
+	Page  int    `json:"page,omitempty"`
+	Limit int    `json:"limit,omitempty"`
 }

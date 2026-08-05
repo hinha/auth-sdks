@@ -76,6 +76,38 @@ func TestCreateGetCancel(t *testing.T) {
 	}
 }
 
+func TestListTasks(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/v1/tasks" {
+			t.Fatalf("unexpected %s %s", r.Method, r.URL.Path)
+		}
+		q := r.URL.Query()
+		if q.Get("owner_service") != "memoo" || q.Get("state") != "pending" || q.Get("owner_user_id") != "7" {
+			t.Fatalf("query = %v", q)
+		}
+		_, _ = w.Write([]byte(`{"message":"OK","data":[{"id":"t1","type":"memoo.episode_ingest","state":"pending","owner_service":"memoo"}],"metadata":{"pagination":{"page":1,"limit":20,"total":1,"next_page":false,"prev_page":false,"max_page":1}},"errors":[],"code":"TASK-HUB-200"}`))
+	}))
+	defer srv.Close()
+
+	cl, err := New(srv.URL, WithAPIKey("sa_test"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	uid := uint(7)
+	out, err := cl.ListTasks(context.Background(), ListTasksInput{
+		OwnerService: "memoo",
+		State:        "pending",
+		OwnerUserID:  &uid,
+		Limit:        20,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.Total != 1 || len(out.Tasks) != 1 || out.Tasks[0].ID != "t1" {
+		t.Fatalf("out = %+v", out)
+	}
+}
+
 func TestOwnerReportPaths(t *testing.T) {
 	var paths []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
