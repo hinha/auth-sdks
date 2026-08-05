@@ -76,6 +76,7 @@ go test ./... -cover
 - **Route discovery → bulk import**: collect HTTP routes (stdlib registry / Echo / Gin) and `ImportEndpoints` into Auth Service
 - **Entitlements & plans**: `GetEntitlements` (effective limits/features for a subject), `SyncPlans` (bootstrap dimensions + plans), and local `IsFeatureEnabled` / `CheckQuota` helpers (no usage storage)
 - **Optional NATS audit producer** (`WithNATS`): best-effort entitlement decision events to Auth Service's JetStream audit stream — never blocks or fails the HTTP call
+- **Task Hub owner client** (`go/taskhub`): HTTP create/get/cancel + owner heartbeat/complete/fail, plus `taskhub/callback` gRPC `Listen` helpers and Dispatch proto for owner services (Memoo, x-engine, …)
 
 ### Design patterns
 
