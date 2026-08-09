@@ -324,11 +324,11 @@ These are **separate Go modules** so consumers can install only what they need
 
 | Module | Install |
 |---|---|
-| Logging | `go get github.com/hinha/auth-sdks/go/stdlog@…` |
-| Logging Echo MW | `go get github.com/hinha/auth-sdks/go/stdlog/echo@…` |
-| Rate limit (memory) | `go get github.com/hinha/auth-sdks/go/ratelimit@…` |
-| Rate limit Redis store | `go get github.com/hinha/auth-sdks/go/ratelimit/redis@…` |
-| Rate limit Echo MW | `go get github.com/hinha/auth-sdks/go/ratelimit/echo@…` |
+| Logging | `go get github.com/hinha/auth-sdks/go/stdlog@…` — see [`go/stdlog/README.md`](./go/stdlog/README.md) |
+| Logging Echo MW | `go get github.com/hinha/auth-sdks/go/stdlog/echo@…` — [`go/stdlog/echo`](./go/stdlog/echo/README.md) |
+| Rate limit (memory) | `go get github.com/hinha/auth-sdks/go/ratelimit@…` — [`go/ratelimit/README.md`](./go/ratelimit/README.md) |
+| Rate limit Redis store | `go get github.com/hinha/auth-sdks/go/ratelimit/redis@…` — [`go/ratelimit/redis`](./go/ratelimit/redis/README.md) |
+| Rate limit Echo MW | `go get github.com/hinha/auth-sdks/go/ratelimit/echo@…` — [`go/ratelimit/echo`](./go/ratelimit/echo/README.md) |
 
 `go/logging` remains the **SDK client** Strategy inside the main module.
 
