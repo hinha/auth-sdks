@@ -65,7 +65,9 @@ go test ./... -cover
 ### Features
 
 - HTTP via [gojek/heimdall](https://github.com/gojek/heimdall) (retry + backoff)
-- Structured logging Strategy (`Zap` / `slog` / `Nop`) + Heimdall request plugin
+- Structured logging Strategy (`Zap` / `slog` / `Nop`) + Heimdall request plugin — **SDK client** (`go/logging`)
+- **Service stdlog** (`go/stdlog`): Zap / Zerolog / slog factories, canonical access-log field keys, redact helpers, `net/http` + Echo middleware (`go/stdlog/echo`)
+- **Flexible ratelimit** (`go/ratelimit`): multi-profile `ulule/limiter`, memory store, KeyFunc/SkipFunc/PickProfile, fail-open, standard rate-limit headers; Echo adapter (`go/ratelimit/echo`)
 - **Client API key gate** via `Credentials(sa_*)` (required on `New`)
 - User session: login / refresh / logout / introspect
 - **First-login bootstrap**: `IsFirstLogin` / `FirstLogin` for operator temp passwords
@@ -314,6 +316,38 @@ defer client.Close() // releases the NATS connection, if any
 allowed, limit, unlimited := client.EvaluateQuota(ctx, ent, "sqlite_db_count", currentDBCount)
 enabled := client.EvaluateFeature(ctx, ent, "reports.export.enabled")
 ```
+
+### Service stdlog + ratelimit
+
+Shared libraries for memoo / task-hub / x-engine (adopt in a follow-up). `go/logging` remains the **SDK client** Strategy.
+
+```go
+import (
+	"github.com/hinha/auth-sdks/go/stdlog"
+	"github.com/hinha/auth-sdks/go/ratelimit"
+)
+
+log, err := stdlog.NewZap(stdlog.Config{Service: "x-engine", Level: "info", Format: "json"})
+// or stdlog.NewZerolog / stdlog.NewSlog
+
+http.Handle("/", stdlog.Middleware(log, stdlog.AccessLogConfig{})(handler))
+
+lim, err := ratelimit.New(ratelimit.Config{
+	Enabled:  true,
+	Profiles: map[string]string{"api": "30-M", "mcp": "90-M"},
+	PickProfile: func(r *http.Request) string {
+		if r.Header.Get("X-Client-Type") == "mcp" {
+			return "mcp"
+		}
+		return "api"
+	},
+	SkipFunc:         ratelimit.SkipPrefixes("/health", "/v1/cms"),
+	CredentialHeader: "X-API-Key",
+})
+http.Handle("/", ratelimit.Middleware(lim, nil)(handler))
+```
+
+Access-log events always use message `"http request completed"` and canonical keys (`request_id`, `method`, `path`, `route`, `status`, `duration_ms`, …). Echo adapters live in `go/stdlog/echo` and `go/ratelimit/echo`.
 
 ### Example smoke
 
