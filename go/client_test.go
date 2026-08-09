@@ -122,7 +122,11 @@ func TestLogin_Authorize_Logout(t *testing.T) {
 		if got := r.Header.Get("Authorization"); got != "Bearer access-1" {
 			t.Fatalf("auth header=%q", got)
 		}
-		requireAPIKey(t, r)
+		// JWT path must not also attach the machine key (Auth Service prefers
+		// Bearer when both are present; attaching sa_* without user_id breaks Allow).
+		if key := r.Header.Get("X-API-Key"); key != "" {
+			t.Fatalf("unexpected X-API-Key=%q on JWT authorize-action", key)
+		}
 		var body map[string]any
 		_ = json.NewDecoder(r.Body).Decode(&body)
 		allowed := body["permission"] == "reports:read"

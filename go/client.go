@@ -27,6 +27,13 @@ type Client struct {
 	api    *api.Requester
 	jwks   *jwksCache
 	prefix string
+
+	// bus is the optional shared NATS connection (WithNATS). nil when disabled.
+	bus *natsBus
+	// audit publishes entitlement audit events via bus (nil-safe).
+	audit *entitlementAuditProducer
+	// presence publishes service heartbeats via bus (nil-safe).
+	presence *presencePublisher
 }
 
 // New constructs a Client bound to baseURL + applicationService + client API key.
@@ -115,7 +122,24 @@ func New(baseURL, applicationService string, opts ...Option) (*Client, error) {
 		},
 	}
 	c.jwks = newJWKSCache(c, cfg.JWKSCacheTTL)
+	c.bus = newNATSBus(o.nats, logger)
+	c.audit = newEntitlementAuditProducer(c.bus, logger)
+	c.presence = newPresencePublisher(c.bus, cfg.ApplicationService, logger)
 	return c, nil
+}
+
+// Close releases resources held by the Client, notably the optional NATS
+// connection (WithNATS) and presence ticker. Safe to call even when NATS is
+// disabled. New does not require a matching Close for HTTP-only usage.
+func (c *Client) Close() error {
+	if c == nil {
+		return nil
+	}
+	c.StopPresence()
+	if c.bus != nil {
+		c.bus.close()
+	}
+	return nil
 }
 
 // ApplicationService returns the bound technical service name.

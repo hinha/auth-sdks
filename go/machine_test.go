@@ -32,7 +32,7 @@ func TestMachine_VerifyAndAuthorizeEndpoint(t *testing.T) {
 		}
 		writeEnvelope(w, http.StatusOK, map[string]any{
 			"allowed": true,
-			"reason":  "scope_ok",
+			"reason":  "scope_granted",
 		})
 	})
 
@@ -57,6 +57,43 @@ func TestMachine_VerifyAndAuthorizeEndpoint(t *testing.T) {
 
 	ep, err := client.AuthorizeEndpoint(ctx, "", AuthorizeEndpointInput{Method: "GET", Path: "/reports"})
 	if err != nil || !ep.Allowed {
+		t.Fatalf("ep=%+v err=%v", ep, err)
+	}
+}
+
+func TestAuthorizeEndpoint_WithBearerJWT(t *testing.T) {
+	t.Parallel()
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/v1/consumer-auth/authorize-endpoint", func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("Authorization"); got != "Bearer user-jwt" {
+			t.Fatalf("Authorization=%q", got)
+		}
+		if key := r.Header.Get("X-API-Key"); key != "" {
+			t.Fatalf("unexpected X-API-Key=%q on JWT path", key)
+		}
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		if body["method"] != "GET" || body["path"] != "/api/v1/namespaces" {
+			t.Fatalf("body=%v", body)
+		}
+		writeEnvelope(w, http.StatusOK, map[string]any{
+			"allowed":              true,
+			"reason":               "scope_granted",
+			"required_scopes":      []string{"namespaces:read"},
+			"granted_scopes":       []string{"namespaces:read"},
+			"required_permissions": []string{"namespaces:read"},
+			"granted_permissions":  []string{"namespaces:read"},
+			"plan":                 "free",
+		})
+	})
+
+	client, _ := newTestClient(t, mux)
+	ep, err := client.AuthorizeEndpointWithBearer(context.Background(), "user-jwt", AuthorizeEndpointInput{
+		Method: "GET",
+		Path:   "/api/v1/namespaces",
+	})
+	if err != nil || !ep.Allowed || ep.Plan != "free" {
 		t.Fatalf("ep=%+v err=%v", ep, err)
 	}
 }

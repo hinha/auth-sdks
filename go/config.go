@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	defaultAPIPrefix   = "/v1/consumer-auth"
+	defaultAPIPrefix    = "/v1/consumer-auth"
 	defaultJWKSCacheTTL = 10 * time.Minute
 )
 
@@ -76,12 +76,13 @@ func (c Config) validate() error {
 type Option func(*options)
 
 type options struct {
-	cfg        Config
-	logger     logging.Logger
-	doer       transport.Doer
-	header     http.Header
-	transport  transport.Config
+	cfg          Config
+	logger       logging.Logger
+	doer         transport.Doer
+	header       http.Header
+	transport    transport.Config
 	skipHeimdall bool
+	nats         NATSConfig
 }
 
 // Credentials sets the sa_* client API key used as the first gate for

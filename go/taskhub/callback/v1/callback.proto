@@ -1,0 +1,34 @@
+syntax = "proto3";
+
+package taskhub.callback.v1;
+
+option go_package = "github.com/hinha/auth-sdks/go/taskhub/callback/v1;callbackv1";
+
+// TaskCallback is the contract owner services implement for hub gRPC dispatch.
+service TaskCallback {
+  // Dispatch accepts work for asynchronous execution. The RPC must return
+  // quickly (Accepted); do not hold the call until the heavy job finishes.
+  rpc Dispatch(DispatchRequest) returns (DispatchResponse);
+}
+
+message DispatchRequest {
+  string task_id = 1;
+  string type = 2;
+  string queue = 3;
+  bytes payload = 4;
+  string correlation_id = 5;
+  string owner_service = 6;
+}
+
+enum DispatchStatus {
+  DISPATCH_STATUS_UNSPECIFIED = 0;
+  DISPATCH_STATUS_ACCEPTED = 1;
+  DISPATCH_STATUS_REJECTED = 2;
+}
+
+message DispatchResponse {
+  DispatchStatus status = 1;
+  string message = 2;
+  // When status is REJECTED, retryable=false maps to a permanent archive.
+  bool retryable = 3;
+}
