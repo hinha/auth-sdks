@@ -65,9 +65,9 @@ go test ./... -cover
 ### Features
 
 - HTTP via [gojek/heimdall](https://github.com/gojek/heimdall) (retry + backoff)
-- Structured logging Strategy (`Zap` / `slog` / `Nop`) + Heimdall request plugin — **SDK client** (`go/logging`)
-- **Service stdlog** (`go/stdlog`): Zap / Zerolog / slog factories, canonical access-log field keys, redact helpers, `net/http` + Echo middleware (`go/stdlog/echo`)
-- **Flexible ratelimit** (`go/ratelimit`): multi-profile `ulule/limiter`, memory store, KeyFunc/SkipFunc/PickProfile, fail-open, standard rate-limit headers; Echo adapter (`go/ratelimit/echo`)
+- Structured logging Strategy (`Zap` / `slog` / `Nop`) + Heimdall request plugin — **SDK client** (`go/logging`, main module)
+- **Service stdlog** (module `go/stdlog`): Zap / Zerolog / slog, strict access-log fields; Echo MW (`go/stdlog/echo`)
+- **Rate limit** (module `go/ratelimit`): multi-profile `ulule/limiter` + memory; optional Redis (`go/ratelimit/redis`); Echo MW (`go/ratelimit/echo`)
 - **Client API key gate** via `Credentials(sa_*)` (required on `New`)
 - User session: login / refresh / logout / introspect
 - **First-login bootstrap**: `IsFirstLogin` / `FirstLogin` for operator temp passwords
@@ -319,12 +319,24 @@ enabled := client.EvaluateFeature(ctx, ent, "reports.export.enabled")
 
 ### Service stdlog + ratelimit
 
-Shared libraries for memoo / task-hub / x-engine (adopt in a follow-up). `go/logging` remains the **SDK client** Strategy.
+These are **separate Go modules** so consumers can install only what they need
+(no Auth SDK / stdlog deps when using ratelimit alone).
+
+| Module | Install |
+|---|---|
+| Logging | `go get github.com/hinha/auth-sdks/go/stdlog@…` |
+| Logging Echo MW | `go get github.com/hinha/auth-sdks/go/stdlog/echo@…` |
+| Rate limit (memory) | `go get github.com/hinha/auth-sdks/go/ratelimit@…` |
+| Rate limit Redis store | `go get github.com/hinha/auth-sdks/go/ratelimit/redis@…` |
+| Rate limit Echo MW | `go get github.com/hinha/auth-sdks/go/ratelimit/echo@…` |
+
+`go/logging` remains the **SDK client** Strategy inside the main module.
 
 ```go
 import (
 	"github.com/hinha/auth-sdks/go/stdlog"
 	"github.com/hinha/auth-sdks/go/ratelimit"
+	redisstore "github.com/hinha/auth-sdks/go/ratelimit/redis"
 )
 
 log, err := stdlog.NewZap(stdlog.Config{Service: "x-engine", Level: "info", Format: "json"})
@@ -332,9 +344,13 @@ log, err := stdlog.NewZap(stdlog.Config{Service: "x-engine", Level: "info", Form
 
 http.Handle("/", stdlog.Middleware(log, stdlog.AccessLogConfig{})(handler))
 
+store, err := redisstore.NewStore(existingRedisClient, redisstore.Options{Prefix: "x-engine-rl"})
+// or omit Store for in-memory; or redisstore.NewStoreFromAddr("127.0.0.1:6379")
+
 lim, err := ratelimit.New(ratelimit.Config{
 	Enabled:  true,
 	Profiles: map[string]string{"api": "30-M", "mcp": "90-M"},
+	Store:    store, // nil → memory
 	PickProfile: func(r *http.Request) string {
 		if r.Header.Get("X-Client-Type") == "mcp" {
 			return "mcp"

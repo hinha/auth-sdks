@@ -30,7 +30,8 @@ func (r Result) RetryAfterSeconds() int64 {
 	return r.Reset - now
 }
 
-// Store abstracts the limiter backend (memory now; Redis later).
+// Store abstracts the limiter backend (memory by default; Redis via
+// github.com/hinha/auth-sdks/go/ratelimit/redis).
 type Store interface {
 	limiter.Store
 }
