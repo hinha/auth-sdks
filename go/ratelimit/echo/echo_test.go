@@ -1,6 +1,7 @@
 package echoadapter_test
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -9,6 +10,7 @@ import (
 	echoadapter "github.com/hinha/auth-sdks/go/ratelimit/echo"
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/require"
+	"github.com/ulule/limiter/v3"
 )
 
 func TestEchoMiddleware_RateLimit(t *testing.T) {
@@ -50,3 +52,70 @@ func TestEchoMiddleware_NilDisabled(t *testing.T) {
 	e.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/ok", nil))
 	require.Equal(t, http.StatusOK, rr.Code)
 }
+
+func TestEchoMiddleware_SkipAndFailPolicies(t *testing.T) {
+	t.Parallel()
+
+	skipLim, err := ratelimit.New(ratelimit.Config{
+		Enabled:  true,
+		Profiles: map[string]string{"default": "1-M"},
+		SkipFunc: ratelimit.SkipPrefixes("/health"),
+	})
+	require.NoError(t, err)
+	e := echo.New()
+	e.Use(echoadapter.Middleware(skipLim))
+	e.GET("/health", func(c echo.Context) error {
+		return c.NoContent(http.StatusNoContent)
+	})
+	rr := httptest.NewRecorder()
+	e.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/health", nil))
+	require.Equal(t, http.StatusNoContent, rr.Code)
+	require.Empty(t, rr.Header().Get(ratelimit.HeaderLimit))
+
+	openLim, err := ratelimit.New(ratelimit.Config{
+		Enabled:  true,
+		Profiles: map[string]string{"default": "1-M"},
+		FailOpen: ratelimit.BoolPtr(true),
+		Store:    &errStore{},
+	})
+	require.NoError(t, err)
+	e2 := echo.New()
+	e2.Use(echoadapter.Middleware(openLim))
+	e2.GET("/x", func(c echo.Context) error { return c.NoContent(http.StatusNoContent) })
+	rr2 := httptest.NewRecorder()
+	e2.ServeHTTP(rr2, httptest.NewRequest(http.MethodGet, "/x", nil))
+	require.Equal(t, http.StatusNoContent, rr2.Code)
+
+	closedLim, err := ratelimit.New(ratelimit.Config{
+		Enabled:  true,
+		Profiles: map[string]string{"default": "1-M"},
+		FailOpen: ratelimit.BoolPtr(false),
+		Store:    &errStore{},
+	})
+	require.NoError(t, err)
+	e3 := echo.New()
+	e3.Use(echoadapter.Middleware(closedLim))
+	e3.GET("/x", func(c echo.Context) error { return c.NoContent(http.StatusNoContent) })
+	rr3 := httptest.NewRecorder()
+	e3.ServeHTTP(rr3, httptest.NewRequest(http.MethodGet, "/x", nil))
+	require.Equal(t, http.StatusServiceUnavailable, rr3.Code)
+}
+
+type errStore struct{}
+
+func (e *errStore) Get(ctx context.Context, key string, rate limiter.Rate) (limiter.Context, error) {
+	return limiter.Context{}, errBoom{}
+}
+func (e *errStore) Peek(ctx context.Context, key string, rate limiter.Rate) (limiter.Context, error) {
+	return limiter.Context{}, errBoom{}
+}
+func (e *errStore) Reset(ctx context.Context, key string, rate limiter.Rate) (limiter.Context, error) {
+	return limiter.Context{}, errBoom{}
+}
+func (e *errStore) Increment(ctx context.Context, key string, count int64, rate limiter.Rate) (limiter.Context, error) {
+	return limiter.Context{}, errBoom{}
+}
+
+type errBoom struct{}
+
+func (errBoom) Error() string { return "boom" }
