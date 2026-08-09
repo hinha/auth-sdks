@@ -65,7 +65,9 @@ go test ./... -cover
 ### Features
 
 - HTTP via [gojek/heimdall](https://github.com/gojek/heimdall) (retry + backoff)
-- Structured logging Strategy (`Zap` / `slog` / `Nop`) + Heimdall request plugin
+- Structured logging Strategy (`Zap` / `slog` / `Nop`) + Heimdall request plugin — **SDK client** (`go/logging`, main module)
+- **Service stdlog** (module `go/stdlog`): Zap / Zerolog / slog, strict access-log fields; Echo MW (`go/stdlog/echo`)
+- **Rate limit** (module `go/ratelimit`): multi-profile `ulule/limiter` + memory; optional Redis (`go/ratelimit/redis`); Echo MW (`go/ratelimit/echo`)
 - **Client API key gate** via `Credentials(sa_*)` (required on `New`)
 - User session: login / refresh / logout / introspect
 - **First-login bootstrap**: `IsFirstLogin` / `FirstLogin` for operator temp passwords
@@ -314,6 +316,54 @@ defer client.Close() // releases the NATS connection, if any
 allowed, limit, unlimited := client.EvaluateQuota(ctx, ent, "sqlite_db_count", currentDBCount)
 enabled := client.EvaluateFeature(ctx, ent, "reports.export.enabled")
 ```
+
+### Service stdlog + ratelimit
+
+These are **separate Go modules** so consumers can install only what they need
+(no Auth SDK / stdlog deps when using ratelimit alone).
+
+| Module | Install |
+|---|---|
+| Logging | `go get github.com/hinha/auth-sdks/go/stdlog@…` — see [`go/stdlog/README.md`](./go/stdlog/README.md) |
+| Logging Echo MW | `go get github.com/hinha/auth-sdks/go/stdlog/echo@…` — [`go/stdlog/echo`](./go/stdlog/echo/README.md) |
+| Rate limit (memory) | `go get github.com/hinha/auth-sdks/go/ratelimit@…` — [`go/ratelimit/README.md`](./go/ratelimit/README.md) |
+| Rate limit Redis store | `go get github.com/hinha/auth-sdks/go/ratelimit/redis@…` — [`go/ratelimit/redis`](./go/ratelimit/redis/README.md) |
+| Rate limit Echo MW | `go get github.com/hinha/auth-sdks/go/ratelimit/echo@…` — [`go/ratelimit/echo`](./go/ratelimit/echo/README.md) |
+
+`go/logging` remains the **SDK client** Strategy inside the main module.
+
+```go
+import (
+	"github.com/hinha/auth-sdks/go/stdlog"
+	"github.com/hinha/auth-sdks/go/ratelimit"
+	redisstore "github.com/hinha/auth-sdks/go/ratelimit/redis"
+)
+
+log, err := stdlog.NewZap(stdlog.Config{Service: "x-engine", Level: "info", Format: "json"})
+// or stdlog.NewZerolog / stdlog.NewSlog
+
+http.Handle("/", stdlog.Middleware(log, stdlog.AccessLogConfig{})(handler))
+
+store, err := redisstore.NewStore(existingRedisClient, redisstore.Options{Prefix: "x-engine-rl"})
+// or omit Store for in-memory; or redisstore.NewStoreFromAddr("127.0.0.1:6379")
+
+lim, err := ratelimit.New(ratelimit.Config{
+	Enabled:  true,
+	Profiles: map[string]string{"api": "30-M", "mcp": "90-M"},
+	Store:    store, // nil → memory
+	PickProfile: func(r *http.Request) string {
+		if r.Header.Get("X-Client-Type") == "mcp" {
+			return "mcp"
+		}
+		return "api"
+	},
+	SkipFunc:         ratelimit.SkipPrefixes("/health", "/v1/cms"),
+	CredentialHeader: "X-API-Key",
+})
+http.Handle("/", ratelimit.Middleware(lim, nil)(handler))
+```
+
+Access-log events always use message `"http request completed"` and canonical keys (`request_id`, `method`, `path`, `route`, `status`, `duration_ms`, …). Echo adapters live in `go/stdlog/echo` and `go/ratelimit/echo`.
 
 ### Example smoke
 
