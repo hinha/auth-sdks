@@ -130,26 +130,35 @@ type recordingLogger struct {
 	lastLevel string
 	lastMsg   string
 	fields    []stdlog.Field
+	extra     []stdlog.Field
+}
+
+func (r *recordingLogger) record(level, msg string, fields []stdlog.Field) {
+	r.lastLevel, r.lastMsg = level, msg
+	r.fields = append(append([]stdlog.Field{}, r.extra...), fields...)
 }
 
 func (r *recordingLogger) Debug(msg string, fields ...stdlog.Field) {
-	r.lastLevel, r.lastMsg, r.fields = "debug", msg, fields
+	r.record("debug", msg, fields)
 }
 func (r *recordingLogger) Info(msg string, fields ...stdlog.Field) {
-	r.lastLevel, r.lastMsg, r.fields = "info", msg, fields
+	r.record("info", msg, fields)
 }
 func (r *recordingLogger) Warn(msg string, fields ...stdlog.Field) {
-	r.lastLevel, r.lastMsg, r.fields = "warn", msg, fields
+	r.record("warn", msg, fields)
 }
 func (r *recordingLogger) Error(msg string, fields ...stdlog.Field) {
-	r.lastLevel, r.lastMsg, r.fields = "error", msg, fields
+	r.record("error", msg, fields)
 }
 func (r *recordingLogger) Fatal(msg string, fields ...stdlog.Field) {
-	r.lastLevel, r.lastMsg, r.fields = "fatal", msg, fields
+	r.record("fatal", msg, fields)
 }
-func (r *recordingLogger) With(...stdlog.Field) stdlog.Logger { return r }
-func (r *recordingLogger) Named(string) stdlog.Logger         { return r }
-func (r *recordingLogger) Sync() error                        { return nil }
+func (r *recordingLogger) With(fields ...stdlog.Field) stdlog.Logger {
+	r.extra = append(r.extra, fields...)
+	return r
+}
+func (r *recordingLogger) Named(string) stdlog.Logger { return r }
+func (r *recordingLogger) Sync() error                { return nil }
 
 func TestNopLogger(t *testing.T) {
 	t.Parallel()

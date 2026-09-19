@@ -50,12 +50,24 @@ func (c *Client) Login(ctx context.Context, in LoginInput) (*Session, error) {
 				logging.String("refer", fl.Refer),
 				logging.String("application_service", fl.ApplicationService),
 			)
+			c.emitAudit(ctx, logging.LevelWarn, logging.EventAuthLoginFailed, logging.DecisionDeny,
+				logging.String(logging.FieldActorType, logging.ActorUser),
+				logging.Int(logging.FieldStatus, http.StatusForbidden),
+			)
 			return nil, fl
 		}
 		logging.Warn(ctx, c.log, "login_failed", logging.Err(err))
+		c.emitAudit(ctx, logging.LevelError, logging.EventAuthLoginFailed, logging.DecisionError,
+			logging.String(logging.FieldActorType, logging.ActorUser),
+			logging.Int(logging.FieldStatus, apiStatus(err)),
+			logging.Err(err),
+		)
 		return nil, err
 	}
 	logging.Info(ctx, c.log, "login_ok", logging.String("session_id", out.SessionID))
+	c.emitAudit(ctx, logging.LevelInfo, logging.EventAuthLogin, logging.DecisionInfo,
+		logging.String(logging.FieldActorType, logging.ActorUser),
+	)
 	return &out, nil
 }
 
@@ -66,9 +78,17 @@ func (c *Client) Refresh(ctx context.Context, refreshToken string) (*Session, er
 		RefreshToken: refreshToken,
 	}, &out, c.withClientKey()...)
 	if err != nil {
+		c.emitAudit(ctx, logging.LevelError, logging.EventAuthRefresh, logging.DecisionError,
+			logging.String(logging.FieldActorType, logging.ActorUser),
+			logging.Int(logging.FieldStatus, apiStatus(err)),
+			logging.Err(err),
+		)
 		return nil, err
 	}
 	logging.Info(ctx, c.log, "refresh_ok", logging.String("session_id", out.SessionID))
+	c.emitAudit(ctx, logging.LevelInfo, logging.EventAuthRefresh, logging.DecisionInfo,
+		logging.String(logging.FieldActorType, logging.ActorUser),
+	)
 	return &out, nil
 }
 
@@ -86,9 +106,17 @@ func (c *Client) Logout(ctx context.Context, refreshToken, sessionID string) err
 		SessionID:    sessionID,
 	}, nil, c.withClientKey()...)
 	if err != nil {
+		c.emitAudit(ctx, logging.LevelError, logging.EventAuthLogout, logging.DecisionError,
+			logging.String(logging.FieldActorType, logging.ActorUser),
+			logging.Int(logging.FieldStatus, apiStatus(err)),
+			logging.Err(err),
+		)
 		return err
 	}
 	logging.Info(ctx, c.log, "logout_ok", logging.String("session_id", sessionID))
+	c.emitAudit(ctx, logging.LevelInfo, logging.EventAuthLogout, logging.DecisionInfo,
+		logging.String(logging.FieldActorType, logging.ActorUser),
+	)
 	return nil
 }
 

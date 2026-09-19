@@ -66,7 +66,8 @@ go test ./... -cover
 
 - HTTP via [gojek/heimdall](https://github.com/gojek/heimdall) (retry + backoff)
 - Structured logging Strategy (`Zap` / `slog` / `Nop`) + Heimdall request plugin — **SDK client** (`go/logging`, main module)
-- **Service stdlog** (module `go/stdlog`): Zap / Zerolog / slog, strict access-log fields; Echo MW (`go/stdlog/echo`)
+- **Closed observability audit** via `logging.Audit` (`kind=audit`, message `"audit event"`) on Login / Allow / Authorize* / VerifyAPIKey / entitlements — no tokens or passwords
+- **Service stdlog** (module `go/stdlog`): Zap / Zerolog / slog, access logs, `LogAudit`, optional Gigapipe Loki sink (`WrapLoki`); Echo MW (`go/stdlog/echo`)
 - **Rate limit** (module `go/ratelimit`): multi-profile `ulule/limiter` + memory; optional Redis (`go/ratelimit/redis`); Echo MW (`go/ratelimit/echo`)
 - **Client API key gate** via `Credentials(sa_*)` (required on `New`)
 - User session: login / refresh / logout / introspect
@@ -298,7 +299,38 @@ client helpers publish best-effort audit events to Auth Service's
 `PLATFORM_ENTITLEMENT_AUDIT` JetStream stream (subject defaults to
 `platform.entitlements.audit.v1.raised`, deduped via `Nats-Msg-Id`). NATS is
 **disabled by default**; connect/publish failures are logged (if a `Logger`
-is configured) and never fail or block the originating call:
+is configured) and never fail or block the originating call.
+
+The same decisions (plus Login / Allow / Authorize* / VerifyAPIKey) also emit
+a **closed observability audit** line (`logging.Audit`, message `"audit event"`,
+`kind=audit`) on the SDK logger. That is independent of NATS. Wire the logger
+through `stdlog.WrapLoki` to ship it to Gigapipe (`POST /loki/api/v1/push`).
+
+#### Gigapipe / Loki (operator query)
+
+Official ingest: [gigapipe.com/docs/api](https://gigapipe.com/docs/api) Loki
+`POST /loki/api/v1/push`. Query (not called by the SDK):
+`GET /loki/api/v1/query_range`, `GET /loki/api/v1/label/{name}/values`.
+
+```go
+log, err := stdlog.NewZap(stdlog.Config{Service: "money-tracker", Level: "info", Format: "json"})
+log, err = stdlog.WrapLoki(log, stdlog.LokiConfig{
+	URL:      os.Getenv("GIGAPIPE_URL"), // https://logs.hinha.web.id
+	Username: os.Getenv("GIGAPIPE_USERNAME"),
+	Password: os.Getenv("GIGAPIPE_PASSWORD"),
+	Env:      os.Getenv("APP_ENV"),
+	Service:  "money-tracker",
+})
+defer log.Sync()
+
+client, err := authsdk.New(baseURL, "money-tracker",
+	authsdk.Credentials(apiKey),
+	authsdk.WithLogger(stdlog.LoggingAdapter(log)),
+)
+```
+
+LogQL: `{kind="audit"}`, `{kind="audit"} | json | decision="deny"`,
+`{kind="access"} | json | status >= 500`.
 
 ```go
 client, err := authsdk.New(baseURL, "memoo",

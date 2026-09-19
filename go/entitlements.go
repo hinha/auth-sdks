@@ -7,6 +7,7 @@ import (
 	"net/url"
 
 	"github.com/hinha/auth-sdks/go/internal/api"
+	"github.com/hinha/auth-sdks/go/logging"
 )
 
 // EntitlementsInput narrows GetEntitlements to a subject. ApplicationService
@@ -74,6 +75,11 @@ func (c *Client) GetEntitlements(ctx context.Context, apiKey string, in Entitlem
 		PlanCode:           out.Plan,
 		Decision:           "info",
 	})
+	c.emitAudit(ctx, logging.LevelInfo, logging.EventEntitlementFetched, logging.DecisionInfo,
+		logging.String(logging.FieldSubjectType, firstNonEmptyStr(out.SubjectType, in.SubjectType)),
+		logging.String(logging.FieldSubjectID, firstNonEmptyStr(out.SubjectID, in.SubjectID)),
+		logging.String(logging.FieldPlanCode, out.Plan),
+	)
 	return &out, nil
 }
 
@@ -295,7 +301,25 @@ func (c *Client) EvaluateQuota(ctx context.Context, ent *EntitlementsResult, key
 }
 
 func (c *Client) publishDecision(ctx context.Context, ent *EntitlementsResult, eventType, dimensionKey, decision string, payload map[string]any) {
-	if c == nil || c.audit == nil {
+	if c == nil {
+		return
+	}
+	level := logging.LevelInfo
+	if decision == logging.DecisionDeny {
+		level = logging.LevelWarn
+	}
+	extras := []logging.Field{
+		logging.String(logging.FieldDimensionKey, dimensionKey),
+	}
+	if ent != nil {
+		extras = append(extras,
+			logging.String(logging.FieldSubjectType, ent.SubjectType),
+			logging.String(logging.FieldSubjectID, ent.SubjectID),
+			logging.String(logging.FieldPlanCode, ent.Plan),
+		)
+	}
+	c.emitAudit(ctx, level, eventType, decision, extras...)
+	if c.audit == nil {
 		return
 	}
 	raw, _ := json.Marshal(payload)
