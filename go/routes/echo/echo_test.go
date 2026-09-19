@@ -33,3 +33,7 @@ func TestCollect(t *testing.T) {
 	}
 	_ = routes.NormalizeAll(got)
 }
+
+func TestCollect_Nil(t *testing.T) {
+	assert.Nil(t, echoadapter.Collect(nil))
+}

@@ -1,0 +1,50 @@
+name: Go unit tests
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: go-tests-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: test (${{ matrix.module }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        module:
+          - go
+          - go/stdlog
+          - go/stdlog/echo
+          - go/ratelimit
+          - go/ratelimit/redis
+          - go/ratelimit/echo
+          - go/routes/echo
+          - go/routes/gin
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.7"
+          cache-dependency-path: |
+            ${{ matrix.module }}/go.sum
+            go/go.sum
+
+      - name: Tidy (nested modules)
+        working-directory: ${{ matrix.module }}
+        run: go mod tidy
+
+      - name: Test with coverage gate (≥80%)
+        env:
+          MIN_COVER: "80"
+        run: |
+          chmod +x .github/scripts/go-test-cover.sh
+          .github/scripts/go-test-cover.sh "${{ matrix.module }}"
