@@ -23,8 +23,18 @@ func (c *Client) VerifyAPIKey(ctx context.Context, apiKey string) (MachineVerify
 	var out MachineVerifyResult
 	err := c.api.DoJSON(ctx, http.MethodPost, c.path("/verify"), nil, &out, api.WithAPIKey(apiKey))
 	if err != nil {
+		c.emitAudit(ctx, logging.LevelError, logging.EventAuthAPIKeyVerify, logging.DecisionError,
+			logging.String(logging.FieldActorType, logging.ActorMachine),
+			logging.String(logging.FieldActorID, logging.RedactMachineID(apiKey)),
+			logging.Int(logging.FieldStatus, apiStatus(err)),
+			logging.Err(err),
+		)
 		return nil, err
 	}
+	c.emitAudit(ctx, logging.LevelInfo, logging.EventAuthAPIKeyVerify, logging.DecisionInfo,
+		logging.String(logging.FieldActorType, logging.ActorMachine),
+		logging.String(logging.FieldActorID, logging.RedactMachineID(apiKey)),
+	)
 	return out, nil
 }
 
@@ -56,6 +66,12 @@ func (c *Client) authorizeEndpoint(ctx context.Context, credential string, in Au
 		Path:               in.Path,
 	}, &out, opts...)
 	if err != nil {
+		c.emitAudit(ctx, logging.LevelError, logging.EventAuthAuthorizeEndpoint, logging.DecisionError,
+			logging.String(logging.FieldAction, in.Method),
+			logging.String(logging.FieldResource, in.Path),
+			logging.Int(logging.FieldStatus, apiStatus(err)),
+			logging.Err(err),
+		)
 		return nil, err
 	}
 	logging.Debug(ctx, c.log, "authorize_endpoint",
@@ -63,6 +79,11 @@ func (c *Client) authorizeEndpoint(ctx context.Context, credential string, in Au
 		logging.String("path", in.Path),
 		logging.Bool("allowed", out.Allowed),
 		logging.String("reason", out.Reason),
+	)
+	decision, level := allowDecision(out.Allowed)
+	c.emitAudit(ctx, level, logging.EventAuthAuthorizeEndpoint, decision,
+		logging.String(logging.FieldAction, in.Method),
+		logging.String(logging.FieldResource, in.Path),
 	)
 	return &out, nil
 }

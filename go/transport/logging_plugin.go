@@ -58,6 +58,7 @@ func (p *requestLogger) OnRequestEnd(req *http.Request, res *http.Response) {
 		level = logging.LevelWarn
 	}
 	p.logger.Log(req.Context(), level, "http_request_end",
+		logging.String(logging.FieldKind, logging.KindSDK),
 		logging.String("component", "heimdall"),
 		logging.String("service", p.service),
 		logging.String("method", req.Method),
@@ -70,6 +71,7 @@ func (p *requestLogger) OnRequestEnd(req *http.Request, res *http.Response) {
 // OnError logs transport failures.
 func (p *requestLogger) OnError(req *http.Request, err error) {
 	logging.Error(req.Context(), p.logger, "http_request_error",
+		logging.String(logging.FieldKind, logging.KindSDK),
 		logging.String("component", "heimdall"),
 		logging.String("service", p.service),
 		logging.String("method", req.Method),

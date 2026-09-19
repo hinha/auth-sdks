@@ -58,6 +58,12 @@ func (c *Client) authorizeAction(ctx context.Context, bearer, apiKey string, in 
 		UserID:             in.UserID,
 	}, &out, opts...)
 	if err != nil {
+		c.emitAudit(ctx, logging.LevelError, logging.EventAuthAuthorizeAction, logging.DecisionError,
+			logging.String(logging.FieldAction, in.Permission),
+			logging.String(logging.FieldResource, in.Path),
+			logging.Int(logging.FieldStatus, apiStatus(err)),
+			logging.Err(err),
+		)
 		return nil, err
 	}
 	logging.Debug(ctx, c.log, "authorize_action",
@@ -65,6 +71,22 @@ func (c *Client) authorizeAction(ctx context.Context, bearer, apiKey string, in 
 		logging.Bool("allowed", out.Allowed),
 		logging.String("reason", out.Reason),
 	)
+	decision, level := allowDecision(out.Allowed)
+	actorType := logging.ActorUser
+	if bearer == "" {
+		actorType = logging.ActorMachine
+	}
+	extras := []logging.Field{
+		logging.String(logging.FieldActorType, actorType),
+		logging.String(logging.FieldAction, in.Permission),
+		logging.String(logging.FieldResource, in.Path),
+	}
+	if in.UserID != nil {
+		extras = append(extras, actorUserID(in.UserID))
+	} else if apiKey != "" {
+		extras = append(extras, logging.String(logging.FieldActorID, logging.RedactMachineID(apiKey)))
+	}
+	c.emitAudit(ctx, level, logging.EventAuthAuthorizeAction, decision, extras...)
 	return &out, nil
 }
 
