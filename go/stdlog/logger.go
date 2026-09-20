@@ -29,6 +29,19 @@ func (nopLogger) With(...Field) Logger   { return nopLogger{} }
 func (nopLogger) Named(string) Logger    { return nopLogger{} }
 func (nopLogger) Sync() error            { return nil }
 
+// Close stops a Loki flush goroutine when l is a WrapLoki logger.
+// Other loggers just Sync. Nil is a no-op.
+func Close(l Logger) error {
+	if l == nil {
+		return nil
+	}
+	type closer interface{ Close() error }
+	if c, ok := l.(closer); ok {
+		return c.Close()
+	}
+	return l.Sync()
+}
+
 // LevelForStatus maps an HTTP status to the access-log severity.
 func LevelForStatus(status int) string {
 	switch {

@@ -60,6 +60,7 @@ func TestWrapLoki_PushesJSONWithBasicAuthAndKindLabels(t *testing.T) {
 		MaxBuffer:     1000,
 	})
 	require.NoError(t, err)
+	t.Cleanup(func() { _ = stdlog.Close(log) })
 
 	stdlog.LogAudit(log, stdlog.AuditEvent{
 		EventType: stdlog.EventAuthLogin,
@@ -122,6 +123,7 @@ func TestWrapLoki_DropsOldestWhenBufferFull(t *testing.T) {
 		Service:       "svc",
 	})
 	require.NoError(t, err)
+	t.Cleanup(func() { _ = stdlog.Close(log) })
 	log.Info("one")
 	log.Info("two")
 	log.Info("three")
@@ -153,8 +155,37 @@ func TestWrapLoki_HTTP401DoesNotPanic(t *testing.T) {
 		Service:       "svc",
 	})
 	require.NoError(t, err)
+	t.Cleanup(func() { _ = stdlog.Close(log) })
 	require.NotPanics(t, func() {
 		log.Info("hello")
 		_ = log.Sync()
 	})
+	require.NoError(t, stdlog.Close(log))
+}
+
+func TestWrapLoki_CloseStopsFlushLoopAndIsIdempotent(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	t.Cleanup(srv.Close)
+
+	log, err := stdlog.WrapLoki(stdlog.Nop(), stdlog.LokiConfig{
+		URL:           srv.URL,
+		FlushInterval: 15 * time.Millisecond,
+		BatchSize:     100,
+		Service:       "auth-service",
+	})
+	require.NoError(t, err)
+	log.Info("hello")
+	require.NoError(t, stdlog.Close(log))
+	require.NoError(t, stdlog.Close(log))
+	child := log.Named("http")
+	require.NoError(t, stdlog.Close(child))
+}
+
+func TestClose_NilAndNop(t *testing.T) {
+	t.Parallel()
+	require.NoError(t, stdlog.Close(nil))
+	require.NoError(t, stdlog.Close(stdlog.Nop()))
 }
