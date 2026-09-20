@@ -26,6 +26,7 @@ jobs:
           - go/ratelimit/echo
           - go/routes/echo
           - go/routes/gin
+          - go/obs
     steps:
       - name: Checkout
         uses: actions/checkout@v4

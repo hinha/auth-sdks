@@ -67,7 +67,8 @@ go test ./... -cover
 - HTTP via [gojek/heimdall](https://github.com/gojek/heimdall) (retry + backoff)
 - Structured logging Strategy (`Zap` / `slog` / `Nop`) + Heimdall request plugin — **SDK client** (`go/logging`, main module)
 - **Closed observability audit** via `logging.Audit` (`kind=audit`, message `"audit event"`) on Login / Allow / Authorize* / VerifyAPIKey / entitlements — no tokens or passwords
-- **Service stdlog** (module `go/stdlog`): Zap / Zerolog / slog, access logs, `LogAudit`, optional Gigapipe Loki sink (`WrapLoki`); Echo MW (`go/stdlog/echo`)
+- **Service stdlog** (module `go/stdlog`): Zap / Zerolog / slog, access logs, `LogAudit`, optional Gigapipe Loki ingest (`WrapLoki` → `POST /loki/api/v1/push`); Echo MW (`go/stdlog/echo`)
+- **Gigapipe obs** (module `go/obs`): Prometheus remote write, Tempo OTLP traces, Pyroscope `/ingest` (optional; same `GIGAPIPE_*` env as Loki)
 - **Rate limit** (module `go/ratelimit`): multi-profile `ulule/limiter` + memory; optional Redis (`go/ratelimit/redis`); Echo MW (`go/ratelimit/echo`)
 - **Client API key gate** via `Credentials(sa_*)` (required on `New`)
 - User session: login / refresh / logout / introspect
@@ -306,13 +307,29 @@ a **closed observability audit** line (`logging.Audit`, message `"audit event"`,
 `kind=audit`) on the SDK logger. That is independent of NATS. Wire the logger
 through `stdlog.WrapLoki` to ship it to Gigapipe (`POST /loki/api/v1/push`).
 
-#### Gigapipe / Loki (operator query)
+#### Gigapipe (Loki ingest + obs)
 
-Official ingest: [gigapipe.com/docs/api](https://gigapipe.com/docs/api) Loki
-`POST /loki/api/v1/push`. Query (not called by the SDK):
-`GET /loki/api/v1/query_range`, `GET /loki/api/v1/label/{name}/values`.
+Official API: [gigapipe.com/docs/api](https://gigapipe.com/docs/api).
+
+| Signal | Gigapipe ingest | SDK |
+|---|---|---|
+| Logs | `POST /loki/api/v1/push` | `stdlog.WrapLoki` |
+| Metrics | `POST /api/v1/prom/remote/write` | [`go/obs`](./go/obs) |
+| Traces | `POST /v1/traces` (OTLP HTTP) | [`go/obs`](./go/obs) |
+| Profiles | `POST /ingest` | [`go/obs`](./go/obs) |
+
+Loki **query** (`query_range`, labels, series, tail) and Prometheus/Tempo query
+APIs are Grafana / Gigapipe View — the SDK does not call them.
 
 ```go
+import (
+	"context"
+
+	authsdk "github.com/hinha/auth-sdks/go"
+	"github.com/hinha/auth-sdks/go/obs"
+	"github.com/hinha/auth-sdks/go/stdlog"
+)
+
 log, err := stdlog.NewZap(stdlog.Config{Service: "money-tracker", Level: "info", Format: "json"})
 log, err = stdlog.WrapLoki(log, stdlog.LokiConfig{
 	URL:      os.Getenv("GIGAPIPE_URL"), // https://logs.hinha.web.id
@@ -322,6 +339,15 @@ log, err = stdlog.WrapLoki(log, stdlog.LokiConfig{
 	Service:  "money-tracker",
 })
 defer log.Sync()
+
+n, err := obs.New(obs.Config{
+	URL:      os.Getenv("GIGAPIPE_URL"),
+	Username: os.Getenv("GIGAPIPE_USERNAME"),
+	Password: os.Getenv("GIGAPIPE_PASSWORD"),
+	Service:  "money-tracker",
+	Env:      os.Getenv("APP_ENV"),
+})
+defer n.Shutdown(context.Background())
 
 client, err := authsdk.New(baseURL, "money-tracker",
 	authsdk.Credentials(apiKey),
@@ -349,7 +375,7 @@ allowed, limit, unlimited := client.EvaluateQuota(ctx, ent, "sqlite_db_count", c
 enabled := client.EvaluateFeature(ctx, ent, "reports.export.enabled")
 ```
 
-### Service stdlog + ratelimit
+### Service stdlog + obs + ratelimit
 
 These are **separate Go modules** so consumers can install only what they need
 (no Auth SDK / stdlog deps when using ratelimit alone).
@@ -358,6 +384,7 @@ These are **separate Go modules** so consumers can install only what they need
 |---|---|
 | Logging | `go get github.com/hinha/auth-sdks/go/stdlog@…` — see [`go/stdlog/README.md`](./go/stdlog/README.md) |
 | Logging Echo MW | `go get github.com/hinha/auth-sdks/go/stdlog/echo@…` — [`go/stdlog/echo`](./go/stdlog/echo/README.md) |
+| Observability | `go get github.com/hinha/auth-sdks/go/obs@v0.1.0` — [`go/obs/README.md`](./go/obs/README.md) |
 | Rate limit (memory) | `go get github.com/hinha/auth-sdks/go/ratelimit@…` — [`go/ratelimit/README.md`](./go/ratelimit/README.md) |
 | Rate limit Redis store | `go get github.com/hinha/auth-sdks/go/ratelimit/redis@…` — [`go/ratelimit/redis`](./go/ratelimit/redis/README.md) |
 | Rate limit Echo MW | `go get github.com/hinha/auth-sdks/go/ratelimit/echo@…` — [`go/ratelimit/echo`](./go/ratelimit/echo/README.md) |

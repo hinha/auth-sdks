@@ -63,8 +63,19 @@ stdlog.LogAudit(log, stdlog.AuditEvent{
 
 ## Gigapipe Loki sink (optional)
 
-Empty `URL` is a no-op (stdout only). Pushes JSON to `{URL}/loki/api/v1/push`
-with HTTP Basic. Fail-open: buffer drop-oldest; 401/403 does not panic.
+Empty `URL` is a no-op (stdout only). Ingest is **complete** for this SDK:
+JSON push to `{URL}/loki/api/v1/push` with HTTP Basic. Fail-open: buffer
+drop-oldest; 401/403 does not panic.
+
+| Gigapipe Loki | This module |
+|---|---|
+| `POST /loki/api/v1/push` | `WrapLoki` |
+| `GET /loki/api/v1/query`, `query_range`, `label(s)`, `label/{name}/values`, `series`, `tail` | Operator Grafana / Gigapipe View (not called by the SDK) |
+| `GET /ready` | Operator health (not called by the SDK) |
+| `POST /v1/logs` (OTLP) | Not used; JSON push is the ingest path |
+
+Metrics, traces, and profiles are a separate module:
+[`github.com/hinha/auth-sdks/go/obs`](../obs).
 
 Env (client, not server `QRYN_*`): `GIGAPIPE_URL`, `GIGAPIPE_USERNAME`,
 `GIGAPIPE_PASSWORD`.
