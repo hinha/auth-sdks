@@ -17,15 +17,18 @@ var startProfiler = func(cfg pyroscope.Config) (profilerStopper, error) {
 }
 
 func startProfiles(cfg Config) (profilerStopper, error) {
-	tags := map[string]string{}
-	if cfg.Service != "" {
-		tags["service"] = cfg.Service
+	id := resolveIdentity(cfg)
+	// The tag set is derived from the same identity as the Prometheus labels, so
+	// profiles and metrics cannot disagree about which service they belong to.
+	tags := make(map[string]string, 8)
+	for _, l := range id.labels() {
+		tags[l.Name] = l.Value
 	}
-	if cfg.Env != "" {
-		tags["env"] = cfg.Env
+	if id.serviceVersion != "" {
+		tags["service_version"] = id.serviceVersion
 	}
 	pcfg := pyroscope.Config{
-		ApplicationName:   nonEmpty(cfg.Service, "auth-sdks"),
+		ApplicationName:   id.serviceName,
 		ServerAddress:     originURL(cfg.URL),
 		BasicAuthUser:     cfg.Username,
 		BasicAuthPassword: cfg.Password,

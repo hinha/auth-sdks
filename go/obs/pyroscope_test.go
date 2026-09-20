@@ -36,6 +36,11 @@ func TestStartProfiles_WiresOriginAndBasicAuth(t *testing.T) {
 	require.Equal(t, "money-tracker", got.ApplicationName)
 	require.Equal(t, "money-tracker", got.Tags["service"])
 	require.Equal(t, "prod", got.Tags["env"])
+	// Profiles carry the same identity as the Prometheus labels, so Grafana
+	// Cloud can correlate a profile to the trace and metric streams.
+	require.Equal(t, "money-tracker", got.Tags["service_name"])
+	require.Equal(t, "prod", got.Tags["deployment_environment"])
+	require.Equal(t, "prod", got.Tags["deployment_environment_name"])
 }
 
 func TestNew_DoesNotStartProfilerWhenURLEmpty(t *testing.T) {

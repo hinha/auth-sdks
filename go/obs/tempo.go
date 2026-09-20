@@ -21,6 +21,11 @@ func (h *Handle) Tracer(name string) trace.Tracer {
 	return h.tp.Tracer(name)
 }
 
+// newTracer is the seam New() uses to build the tracer provider, so the
+// fail-open path can be exercised without a real exporter failure. Production
+// always resolves to newTracerProvider.
+var newTracer = newTracerProvider
+
 func newTracerProvider(ctx context.Context, cfg Config) (trace.TracerProvider, func(context.Context) error, error) {
 	endpoint := joinAPI(cfg.URL, pathOTLPTraces)
 	opts := []otlptracehttp.Option{

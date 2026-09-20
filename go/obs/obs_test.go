@@ -49,6 +49,12 @@ func TestPrometheusRemoteWrite_CounterLabelsAndAuth(t *testing.T) {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
+		// The handle pushes once immediately, which can land before this test
+		// registers its counter, so wait for the request carrying it.
+		if !hasSeriesNamed(body, "jobs_total") {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
 		mu.Lock()
 		gotPath = r.URL.Path
 		gotAuth = r.Header.Get("Authorization")
@@ -202,15 +208,26 @@ func TestHistogramConversion_IncludesNameAndLe(t *testing.T) {
 		body, err := prompb.Unmarshal(dec)
 		require.NoError(t, err)
 		mu.Lock()
+		var sawHistogram bool
 		for _, ts := range body.Timeseries {
 			for _, l := range ts.Labels {
-				if l.Name == "__name__" {
-					names = append(names, l.Value)
+				if l.Name != "__name__" {
+					continue
+				}
+				names = append(names, l.Value)
+				if l.Value == "http_request_duration_seconds_bucket" {
+					sawHistogram = true
 				}
 			}
 		}
 		mu.Unlock()
 		w.WriteHeader(http.StatusNoContent)
+		// The handle pushes once immediately, which can land before this test
+		// registers its histogram, so wait for the request that carries it
+		// instead of asserting on whichever request happened to arrive first.
+		if !sawHistogram {
+			return
+		}
 		select {
 		case <-done:
 		default:
