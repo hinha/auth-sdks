@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -45,6 +46,7 @@ type lokiSink struct {
 	warnOnce sync.Once
 	stop     chan struct{}
 	stopped  sync.Once
+	closed   atomic.Bool
 }
 
 type lokiLogger struct {
@@ -132,6 +134,17 @@ func (l *lokiLogger) Sync() error {
 	return l.base.Sync()
 }
 
+// Close stops the optional flush ticker, flushes remaining entries, and Syncs the base logger.
+func (l *lokiLogger) Close() error {
+	if l.sink != nil {
+		l.sink.shutdown()
+	}
+	if l.base == nil {
+		return nil
+	}
+	return l.base.Sync()
+}
+
 func (l *lokiLogger) enqueue(level, msg string, fields []Field) {
 	if l.sink == nil {
 		return
@@ -196,7 +209,18 @@ func (s *lokiSink) loop() {
 	}
 }
 
+func (s *lokiSink) shutdown() {
+	s.stopped.Do(func() {
+		s.closed.Store(true)
+		close(s.stop)
+		s.flush(true)
+	})
+}
+
 func (s *lokiSink) enqueue(e lokiEntry) {
+	if s.closed.Load() {
+		return
+	}
 	var overflow []lokiEntry
 	s.mu.Lock()
 	for len(s.buf) >= s.cfg.MaxBuffer {
