@@ -16,17 +16,6 @@ import (
 	dto "github.com/prometheus/client_model/go"
 )
 
-func extraLabels(cfg Config) []prompb.Label {
-	var out []prompb.Label
-	if cfg.Service != "" {
-		out = append(out, prompb.Label{Name: "service", Value: cfg.Service})
-	}
-	if cfg.Env != "" {
-		out = append(out, prompb.Label{Name: "env", Value: cfg.Env})
-	}
-	return out
-}
-
 func familiesToWriteRequest(mfs []*dto.MetricFamily, extra []prompb.Label, now int64) prompb.WriteRequest {
 	var wr prompb.WriteRequest
 	for _, mf := range mfs {
@@ -160,10 +149,13 @@ func (h *Handle) pushMetrics() {
 	}
 	mfs, err := h.gatherer.Gather()
 	if err != nil {
-		h.warn("gigapipe prometheus gather failed")
-		return
+		// Gather returns the families that succeeded alongside the error, so one
+		// inconsistent collector must not blind the entire service. Discarding
+		// the partial result here was silently dropping every metric.
+		h.warn("gigapipe prometheus gather failed", err.Error())
 	}
 	wr := familiesToWriteRequest(mfs, h.extra, time.Now().UTC().UnixMilli())
+	wr.Metadata = metricMetadata(mfs)
 	if len(wr.Timeseries) == 0 {
 		return
 	}
@@ -181,7 +173,7 @@ func (h *Handle) pushMetrics() {
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, h.remoteWriteURL, bytes.NewReader(raw))
 	if err != nil {
-		h.warn("gigapipe prometheus write failed")
+		h.warn("gigapipe prometheus write failed", err.Error())
 		return
 	}
 	applyAuth(req, h.cfg)
@@ -190,17 +182,27 @@ func (h *Handle) pushMetrics() {
 	req.Header.Set("X-Prometheus-Remote-Write-Version", "0.1.0")
 	res, err := h.client.Do(req)
 	if err != nil {
-		h.warn("gigapipe prometheus write failed")
+		h.warn("gigapipe prometheus write failed", err.Error())
 		return
 	}
 	defer func() { _, _ = io.Copy(io.Discard, res.Body); _ = res.Body.Close() }()
 	if res.StatusCode < 200 || res.StatusCode > 299 {
-		h.warn("gigapipe prometheus write failed: " + res.Status)
+		h.warn("gigapipe prometheus write failed", res.Status)
 	}
 }
 
 func (h *Handle) loopMetrics(interval time.Duration) {
 	defer h.metricsWG.Done()
+	// Push once immediately. Waiting a full interval meant a service that had
+	// not yet observed any traffic sent nothing at all, so it never appeared in
+	// Grafana, and a process that exited before the first tick never reported.
+	select {
+	case <-h.stopCh:
+		// Already shutting down; Shutdown performs the final flush itself.
+		return
+	default:
+	}
+	h.pushMetrics()
 	t := time.NewTicker(interval)
 	defer t.Stop()
 	for {

@@ -20,6 +20,7 @@ type Handle struct {
 	cfg            Config
 	client         *http.Client
 	reg            *prometheus.Registry
+	defaults       *prometheus.Registry
 	gatherer       prometheus.Gatherer
 	extra          []prompb.Label
 	remoteWriteURL string
@@ -30,7 +31,8 @@ type Handle struct {
 	metricsWG      sync.WaitGroup
 	pushMu         sync.Mutex
 	snappyBuf      []byte
-	warnOnce       sync.Once
+	warnMu         sync.Mutex
+	warned         map[string]struct{}
 	closed         sync.Once
 }
 
@@ -38,14 +40,17 @@ type Handle struct {
 // Empty URL returns a no-op Handle (local registry, noop tracer).
 func New(cfg Config) (*Handle, error) {
 	reg := prometheus.NewRegistry()
+	id := resolveIdentity(cfg)
 	h := &Handle{
 		cfg:      cfg,
 		reg:      reg,
-		gatherer: reg,
-		extra:    extraLabels(cfg),
+		defaults: newDefaultRegistry(cfg, id),
+		extra:    id.labels(),
 		tp:       noop.NewTracerProvider(),
 		stopCh:   make(chan struct{}),
 	}
+	// Built before the empty-URL return so target_info exists even in no-op mode.
+	h.gatherer = h.collectorSet()
 	if strings.TrimSpace(cfg.URL) == "" {
 		return h, nil
 	}
@@ -61,18 +66,23 @@ func New(cfg Config) (*Handle, error) {
 		go h.loopMetrics(interval)
 	}
 	if !cfg.DisableTraces {
-		tp, shutdown, err := newTracerProvider(context.Background(), cfg)
+		tp, shutdown, err := newTracer(context.Background(), cfg)
 		if err != nil {
-			h.forceStopMetrics()
-			return nil, err
+			// Fail open. Returning nil here used to stop the metrics loop and
+			// hand the caller no handle at all, so a tracing problem silently
+			// removed the service's metrics and profiles too — the exact
+			// disappearance this release exists to prevent. Traces degrade to
+			// no-op; everything else keeps running.
+			h.warn("gigapipe tempo start failed", err.Error())
+		} else {
+			h.tp = tp
+			h.tpShutdown = shutdown
 		}
-		h.tp = tp
-		h.tpShutdown = shutdown
 	}
 	if !cfg.DisableProfiles {
 		p, err := startProfiles(cfg)
 		if err != nil {
-			h.warn("gigapipe pyroscope start failed")
+			h.warn("gigapipe pyroscope start failed", err.Error())
 		} else {
 			h.profiler = p
 		}
@@ -120,12 +130,34 @@ func (h *Handle) forceStopMetrics() {
 	h.metricsWG.Wait()
 }
 
-func (h *Handle) warn(msg string) {
-	h.warnOnce.Do(func() {
-		if h.cfg.Logger != nil {
-			h.cfg.Logger(msg)
-			return
-		}
-		_, _ = fmt.Fprintln(os.Stderr, msg)
-	})
+// warn reports a condition once per distinct key.
+//
+// Fail-open failures recur on every interval, so an unbounded logger would drown
+// the log. A single one-shot warning is wrong in the other direction: the metric
+// push now runs at startup, exactly when DNS and TLS may not be ready, so the
+// first failure would consume the only warning and silence every later, real
+// one — turning a visible outage into a silent one.
+func (h *Handle) warn(key, detail string) {
+	if h == nil {
+		return
+	}
+	h.warnMu.Lock()
+	if h.warned == nil {
+		h.warned = make(map[string]struct{})
+	}
+	_, seen := h.warned[key]
+	h.warned[key] = struct{}{}
+	h.warnMu.Unlock()
+	if seen {
+		return
+	}
+	msg := key
+	if detail != "" {
+		msg = key + ": " + detail
+	}
+	if h.cfg.Logger != nil {
+		h.cfg.Logger(msg)
+		return
+	}
+	_, _ = fmt.Fprintln(os.Stderr, msg)
 }
