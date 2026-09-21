@@ -7,6 +7,7 @@ import (
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
+	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.37.0"
@@ -61,8 +62,16 @@ func newTracerProvider(ctx context.Context, cfg Config) (trace.TracerProvider, f
 	)
 	if cfg.InstallGlobal {
 		otel.SetTracerProvider(tp)
+		otel.SetTextMapPropagator(defaultTextMapPropagator())
 	}
 	return tp, tp.Shutdown, nil
+}
+
+func defaultTextMapPropagator() propagation.TextMapPropagator {
+	return propagation.NewCompositeTextMapPropagator(
+		propagation.TraceContext{},
+		propagation.Baggage{},
+	)
 }
 
 func nonEmpty(s, fallback string) string {

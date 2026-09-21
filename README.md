@@ -68,7 +68,7 @@ go test ./... -cover
 - Structured logging Strategy (`Zap` / `slog` / `Nop`) + Heimdall request plugin — **SDK client** (`go/logging`, main module)
 - **Closed observability audit** via `logging.Audit` (`kind=audit`, message `"audit event"`) on Login / Allow / Authorize* / VerifyAPIKey / entitlements — no tokens or passwords
 - **Service stdlog** (module `go/stdlog`): Zap / Zerolog / slog, access logs, `LogAudit`, optional Gigapipe Loki ingest (`WrapLoki` → `POST /loki/api/v1/push`); Echo MW (`go/stdlog/echo`)
-- **Gigapipe obs** (module `go/obs`): Prometheus remote write, Tempo OTLP traces, Pyroscope `/ingest` (optional; same `GIGAPIPE_*` env as Loki)
+- **Gigapipe obs** (module `go/obs`): Prometheus remote write, Tempo OTLP traces, Pyroscope `/ingest` (optional; same `GIGAPIPE_*` env as Loki). Generic hop API (`Observe` / `HTTPMiddleware` / `WrapTransport`) — no Redis/GORM/Echo dependencies; see [`go/obs/README.md`](./go/obs/README.md).
 - **Rate limit** (module `go/ratelimit`): multi-profile `ulule/limiter` + memory; optional Redis (`go/ratelimit/redis`); Echo MW (`go/ratelimit/echo`)
 - **Client API key gate** via `Credentials(sa_*)` (required on `New`)
 - User session: login / refresh / logout / introspect
@@ -384,7 +384,7 @@ These are **separate Go modules** so consumers can install only what they need
 |---|---|
 | Logging | `go get github.com/hinha/auth-sdks/go/stdlog@…` — see [`go/stdlog/README.md`](./go/stdlog/README.md) |
 | Logging Echo MW | `go get github.com/hinha/auth-sdks/go/stdlog/echo@…` — [`go/stdlog/echo`](./go/stdlog/echo/README.md) |
-| Observability | `go get github.com/hinha/auth-sdks/go/obs@v0.1.0` — [`go/obs/README.md`](./go/obs/README.md) |
+| Observability | `go get github.com/hinha/auth-sdks/go/obs@v0.3.0` — [`go/obs/README.md`](./go/obs/README.md) |
 | Rate limit (memory) | `go get github.com/hinha/auth-sdks/go/ratelimit@…` — [`go/ratelimit/README.md`](./go/ratelimit/README.md) |
 | Rate limit Redis store | `go get github.com/hinha/auth-sdks/go/ratelimit/redis@…` — [`go/ratelimit/redis`](./go/ratelimit/redis/README.md) |
 | Rate limit Echo MW | `go get github.com/hinha/auth-sdks/go/ratelimit/echo@…` — [`go/ratelimit/echo`](./go/ratelimit/echo/README.md) |

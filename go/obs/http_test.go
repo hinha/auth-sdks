@@ -45,4 +45,9 @@ func TestHTTPClient_DefaultTimeout(t *testing.T) {
 	t.Parallel()
 	c := httpClient(Config{})
 	require.Equal(t, 5*time.Second, c.Timeout)
+	tr, ok := c.Transport.(*http.Transport)
+	require.True(t, ok)
+	require.Equal(t, 32, tr.MaxIdleConns)
+	require.Equal(t, 4, tr.MaxIdleConnsPerHost)
+	require.Equal(t, 30*time.Second, tr.IdleConnTimeout)
 }
