@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"go.opentelemetry.io/otel/propagation"
+	semconv "go.opentelemetry.io/otel/semconv/v1.37.0"
 )
 
 // HTTPOption configures HTTPMiddleware.
@@ -31,7 +32,9 @@ type transportOptions struct {
 	path string
 }
 
-// WithPeer sets a logical destination label (not a URL with query).
+// WithPeer sets the logical destination for Tempo service graphs. It must match
+// the downstream process's Config.Service (its resource service.name), not a
+// raw hostname or a URL with query.
 func WithPeer(peer string) TransportOption {
 	return func(o *transportOptions) { o.peer = peer }
 }
@@ -134,6 +137,11 @@ func (t *hopTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		Operation: op,
 		Peer:      peer,
 	})
+	if timer.span != nil && req.URL != nil {
+		if host := req.URL.Hostname(); host != "" {
+			timer.span.SetAttributes(semconv.ServerAddress(host))
+		}
+	}
 	req = req.WithContext(ctx)
 	if p := t.h.textMapPropagator(); p != nil {
 		p.Inject(ctx, propagation.HeaderCarrier(req.Header))

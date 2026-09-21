@@ -10,7 +10,6 @@ import (
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	semconv "go.opentelemetry.io/otel/semconv/v1.37.0"
 	"go.opentelemetry.io/otel/trace"
 	"go.opentelemetry.io/otel/trace/noop"
 )
@@ -48,9 +47,7 @@ func newTracerProvider(ctx context.Context, cfg Config) (trace.TracerProvider, f
 		return nil, nil, err
 	}
 	res, err := resource.New(ctx,
-		resource.WithAttributes(
-			semconv.ServiceName(nonEmpty(cfg.Service, "auth-sdks")),
-		),
+		resource.WithAttributes(resourceAttributes(cfg)...),
 	)
 	if err != nil {
 		_ = exp.Shutdown(ctx)
@@ -72,11 +69,4 @@ func defaultTextMapPropagator() propagation.TextMapPropagator {
 		propagation.TraceContext{},
 		propagation.Baggage{},
 	)
-}
-
-func nonEmpty(s, fallback string) string {
-	if strings.TrimSpace(s) == "" {
-		return fallback
-	}
-	return s
 }

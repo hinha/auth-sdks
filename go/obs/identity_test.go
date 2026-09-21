@@ -129,3 +129,18 @@ func TestIdentitySemconvAttributes_OmitsUnset(t *testing.T) {
 	require.NotContains(t, byKey, attribute.Key("service.version"))
 	require.NotContains(t, byKey, attribute.Key("deployment.environment.name"))
 }
+
+func TestResourceAttributes_MatchesIdentity(t *testing.T) {
+	t.Parallel()
+	cfg := Config{
+		Service:          "auth-service",
+		Env:              "staging",
+		ServiceNamespace: "platform",
+		ServiceVersion:   "v1.2.3",
+	}
+	got := attrMap(resourceAttributes(cfg))
+	require.Equal(t, "auth-service", got["service.name"])
+	require.Equal(t, "platform", got["service.namespace"])
+	require.Equal(t, "v1.2.3", got["service.version"])
+	require.Equal(t, "staging", got["deployment.environment.name"])
+}
