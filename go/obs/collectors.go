@@ -6,7 +6,8 @@ import (
 )
 
 // newDefaultRegistry builds the private registry that holds the always-on
-// series: Go runtime, process, build info, and target_info.
+// series: Go runtime, process, process I/O, filesystem, build info, and
+// target_info.
 //
 // It deliberately is NOT the registry the application registers on. Putting the
 // Go and process collectors on the application's registry would make an
@@ -28,6 +29,8 @@ func newDefaultRegistry(cfg Config, id identity) *prometheus.Registry {
 	_ = reg.Register(collectors.NewGoCollector())
 	_ = reg.Register(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
 	_ = reg.Register(collectors.NewBuildInfoCollector())
+	_ = reg.Register(newProcessIOCollector())
+	_ = reg.Register(newFilesystemCollector(cfg.FilesystemPaths))
 	return reg
 }
 

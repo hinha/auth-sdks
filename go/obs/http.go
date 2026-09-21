@@ -2,6 +2,7 @@ package obs
 
 import (
 	"encoding/base64"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -53,5 +54,28 @@ func httpClient(cfg Config) *http.Client {
 	if timeout <= 0 {
 		timeout = 5 * time.Second
 	}
-	return &http.Client{Timeout: timeout}
+	return &http.Client{Timeout: timeout, Transport: newIdleCappedTransport()}
+}
+
+func newIdleCappedTransport() *http.Transport {
+	if dt, ok := http.DefaultTransport.(*http.Transport); ok && dt != nil {
+		tr := dt.Clone()
+		tr.MaxIdleConns = 32
+		tr.MaxIdleConnsPerHost = 4
+		tr.IdleConnTimeout = 30 * time.Second
+		return tr
+	}
+	return &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: (&net.Dialer{
+			Timeout:   30 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}).DialContext,
+		ForceAttemptHTTP2:     true,
+		MaxIdleConns:          32,
+		MaxIdleConnsPerHost:   4,
+		IdleConnTimeout:       30 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+	}
 }

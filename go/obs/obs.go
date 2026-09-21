@@ -11,9 +11,12 @@ import (
 
 	"github.com/hinha/auth-sdks/go/obs/internal/prompb"
 	"github.com/prometheus/client_golang/prometheus"
+	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 	"go.opentelemetry.io/otel/trace/noop"
 )
+
+const maxWarnedKeys = 32
 
 // Handle is the Gigapipe metrics / traces / profiles runtime.
 type Handle struct {
@@ -34,6 +37,12 @@ type Handle struct {
 	warnMu         sync.Mutex
 	warned         map[string]struct{}
 	closed         sync.Once
+	hopOnce        sync.Once
+	hopDuration    *prometheus.HistogramVec
+	hopSeriesMu    sync.Mutex
+	hopSeries      map[string]struct{}
+	propagator     propagation.TextMapPropagator
+	ownsClient     bool
 }
 
 // New starts optional Prometheus remote-write, OTLP traces, and Pyroscope ingest.
@@ -42,12 +51,13 @@ func New(cfg Config) (*Handle, error) {
 	reg := prometheus.NewRegistry()
 	id := resolveIdentity(cfg)
 	h := &Handle{
-		cfg:      cfg,
-		reg:      reg,
-		defaults: newDefaultRegistry(cfg, id),
-		extra:    id.labels(),
-		tp:       noop.NewTracerProvider(),
-		stopCh:   make(chan struct{}),
+		cfg:        cfg,
+		reg:        reg,
+		defaults:   newDefaultRegistry(cfg, id),
+		extra:      id.labels(),
+		tp:         noop.NewTracerProvider(),
+		stopCh:     make(chan struct{}),
+		propagator: defaultTextMapPropagator(),
 	}
 	// Built before the empty-URL return so target_info exists even in no-op mode.
 	h.gatherer = h.collectorSet()
@@ -55,6 +65,7 @@ func New(cfg Config) (*Handle, error) {
 		return h, nil
 	}
 	h.client = httpClient(cfg)
+	h.ownsClient = cfg.HTTPClient == nil
 	h.remoteWriteURL = joinAPI(cfg.URL, pathRemoteWrite)
 
 	if !cfg.DisableMetrics {
@@ -117,6 +128,9 @@ func (h *Handle) Shutdown(ctx context.Context) error {
 				err = e
 			}
 		}
+		if h.ownsClient && h.client != nil {
+			h.client.CloseIdleConnections()
+		}
 	})
 	return err
 }
@@ -143,14 +157,15 @@ func (h *Handle) warn(key, detail string) {
 	}
 	h.warnMu.Lock()
 	if h.warned == nil {
-		h.warned = make(map[string]struct{})
+		h.warned = make(map[string]struct{}, maxWarnedKeys)
 	}
 	_, seen := h.warned[key]
-	h.warned[key] = struct{}{}
-	h.warnMu.Unlock()
-	if seen {
+	if seen || len(h.warned) >= maxWarnedKeys {
+		h.warnMu.Unlock()
 		return
 	}
+	h.warned[key] = struct{}{}
+	h.warnMu.Unlock()
 	msg := key
 	if detail != "" {
 		msg = key + ": " + detail

@@ -157,6 +157,21 @@ func TestDefaultCollectors_NoDuplicateSeries(t *testing.T) {
 					"the application's series must win over the default")
 			},
 		},
+		{
+			name: "app registers process_io_read_bytes_total",
+			byApp: func(t *testing.T, reg prometheus.Registerer) {
+				c := prometheus.NewCounter(prometheus.CounterOpts{
+					Name: metricProcessIOReadBytes,
+					Help: "app-owned io read",
+				})
+				c.Add(7)
+				reg.MustRegister(c)
+			},
+			verify: func(t *testing.T, mfs []*dto.MetricFamily) {
+				require.Equal(t, 7.0, counterValue(t, mfs, metricProcessIOReadBytes),
+					"the application's series must win over the default")
+			},
+		},
 	}
 
 	for _, tc := range cases {
@@ -184,6 +199,8 @@ func TestDefaultCollectors_DisabledSkipsDefaults(t *testing.T) {
 	require.True(t, hasFamily(mfs, "app_events_total"), "app metrics must still be sent")
 	require.False(t, hasFamilyWithPrefix(mfs, "go_"))
 	require.False(t, hasFamilyWithPrefix(mfs, "process_"))
+	require.False(t, hasFamilyWithPrefix(mfs, "process_io_"))
+	require.False(t, hasFamilyWithPrefix(mfs, "process_filesystem_"))
 	// target_info is the service identity, not a runtime collector, so the
 	// opt-out does not remove it.
 	require.True(t, hasFamily(mfs, metricTargetInfo))

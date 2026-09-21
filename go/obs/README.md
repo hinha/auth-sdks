@@ -10,7 +10,7 @@ Does **not** import `stdlog` or the Auth SDK client.
 ## Install
 
 ```bash
-go get github.com/hinha/auth-sdks/go/obs@v0.2.0
+go get github.com/hinha/auth-sdks/go/obs@v0.3.0
 ```
 
 ## Gigapipe ingest (this module)
@@ -38,6 +38,10 @@ n, err := obs.New(obs.Config{
 	// Optional, completes the OTel service identity.
 	ServiceNamespace: "payments",
 	ServiceVersion:   "v1.4.2", // falls back to the version stamped in the binary
+
+	// Optional. Default Statfs path is cwd ("."). Set this to a PVC / data dir
+	// when that volume is the disk that matters.
+	// FilesystemPaths: []string{"/var/lib/app"},
 })
 defer n.Shutdown(context.Background())
 
@@ -51,7 +55,99 @@ defer span.End()
 ```
 
 Disable one signal with `DisableMetrics`, `DisableTraces`, or `DisableProfiles`.  
-`InstallGlobal` (off by default) calls `otel.SetTracerProvider`.
+`InstallGlobal` (off by default) calls `otel.SetTracerProvider` and sets a W3C
+`TraceContext` + `Baggage` text-map propagator.
+
+## Client hops (no Redis / GORM / Echo in this module)
+
+Apps already construct Echo/Gin, go-redis, and GORM. They wrap those clients
+here so Grafana can show `incoming HTTP → DB → Redis → outbound HTTP` as one
+histogram family plus Tempo child spans. This module does **not** import
+`go-redis`, GORM, Echo, Gin, pgx, otelsql, redisotel, or otelhttp.
+
+```go
+err := h.Observe(ctx, obs.Hop{
+    Component: "redis",
+    Operation: "GET",      // command name, never the key
+    Peer:      "cache",    // logical dest, never a URL with query
+}, func(ctx context.Context) error {
+    return rdb.Get(ctx, key).Err()
+})
+```
+
+Split Before/After hooks (GORM plugin, go-redis `Hook`) use `Start` / `End`.
+`End` is idempotent. Nil `Handle` and empty-URL handles do not panic; `fn` still runs.
+
+| Metric | Type | Labels |
+|---|---|---|
+| `client_request_duration_seconds` | histogram | `component`, `operation`, `peer`, `status` |
+
+Identity labels (`service`, `env`, …) are attached at remote-write time, not on
+the collector. `status` is an HTTP code (`200`, `500`, …) for HTTP hops and
+`ok` / `error` otherwise. Error **messages**, Redis keys, full SQL, and raw
+URLs with ids/query strings are forbidden as label values.
+
+Bounds (empty → `unknown`, then truncate): `component` 32, `operation` 128,
+`peer` 64, `status` 16 runes. Distinct hop label tuples are capped at 1024;
+further combinations record on `unknown` so a high-cardinality `Operation`
+cannot grow `HistogramVec` without bound.
+
+Stdlib HTTP (build the middleware / transport **once** at startup):
+
+```go
+e.Use(echo.WrapMiddleware(h.HTTPMiddleware(obs.WithRoute(func(r *http.Request) string {
+    if p, ok := r.Context().Value(echoRouteKey).(string); ok && p != "" {
+        return p
+    }
+    return "unmatched"
+}))))
+
+http.DefaultTransport = h.WrapTransport(http.DefaultTransport, obs.WithPeer("upstream"))
+```
+
+Default inbound operation is `METHOD unmatched`, never `URL.Path`. Outbound
+operation is the method only unless `WithPathTemplate` is set. Wrapping an
+already-wrapped transport double-counts duration — wrap once.
+
+### App recipes (copy into the service that already has the client library)
+
+**go-redis v9** — implement `redis.Hook` in the app; never put the key in `Operation`:
+
+```go
+type obsRedisHook struct{ h *obs.Handle }
+
+func (o obsRedisHook) DialHook(next redis.DialHook) redis.DialHook { return next }
+func (o obsRedisHook) ProcessHook(next redis.ProcessHook) redis.ProcessHook {
+    return func(ctx context.Context, cmd redis.Cmder) error {
+        return o.h.Observe(ctx, obs.Hop{
+            Component: "redis",
+            Operation: cmd.FullName(),
+            Peer:      "cache",
+        }, func(ctx context.Context) error { return next(ctx, cmd) })
+    }
+}
+func (o obsRedisHook) ProcessPipelineHook(next redis.ProcessPipelineHook) redis.ProcessPipelineHook {
+    return next
+}
+
+rdb.AddHook(obsRedisHook{h: h})
+```
+
+**GORM** — register callbacks in the app and pair `Start`/`End`:
+
+```go
+ctx, t := h.Start(tx.Statement.Context, obs.Hop{
+    Component: "db",
+    Operation: "SELECT users", // table + verb, never the interpolated SQL
+    Peer:      "postgres",
+})
+tx.Statement.Context = ctx
+// after_query:
+t.End(tx.Error)
+```
+
+**Echo / Gin** — `echo.WrapMiddleware(h.HTTPMiddleware(...))` (or Gin equivalent).
+Store the framework route template on context in the app if `r.Pattern` is empty.
 
 Do not put passwords, tokens, or API keys in metric labels, span attributes, or
 profile tags. Label names `password`, `token`, `authorization`, and `api_key`
@@ -69,6 +165,19 @@ a worker that never serves HTTP is no longer invisible.
 | `go_*` | mixed | client_golang defaults |
 | `go_build_info` | gauge | `path`, `version`, `checksum` |
 | `process_*` | mixed | client_golang defaults |
+| `process_io_*` | counter | Linux `/proc/self/io` only; omitted elsewhere |
+| `process_filesystem_avail_bytes` | gauge | `path` — Statfs `Bavail * Bsize` (Linux/macOS) |
+| `process_filesystem_size_bytes` | gauge | `path` — Statfs `Blocks * Bsize` (Linux/macOS) |
+
+`process_io_read_bytes_total` / `process_io_write_bytes_total` are kernel
+`read_bytes` / `write_bytes` (storage). `process_io_rchar_bytes_total` /
+`process_io_wchar_bytes_total` include page cache. Grafana: `rate(...[5m])`,
+not a latency histogram.
+
+Filesystem gauges default to cwd (`path="."`). They are **not** host mount
+tables (`node_filesystem_*`). Used fraction:
+
+`1 - process_filesystem_avail_bytes / process_filesystem_size_bytes`
 
 Uptime is `time() - process_start_time_seconds`, and `target_info == 1` is the
 presence signal — so the per-service `*_process_up` gauge that used to be needed
@@ -108,9 +217,10 @@ and the default is dropped, so double-emission cannot happen. That means:
 - If you added a `*_process_up` gauge to work around the old behaviour, you can
   delete it — but nothing breaks if you leave it.
 
-`DisableDefaultCollectors` drops the Go runtime, process, and build-info
-collectors as an ingest-cost escape hatch. It does **not** drop `target_info`,
-which is the service identity rather than a runtime collector.
+`DisableDefaultCollectors` drops the Go runtime, process, process I/O,
+filesystem, and build-info collectors as an ingest-cost escape hatch. It does
+**not** drop `target_info`, which is the service identity rather than a runtime
+collector.
 
 ### Inspect what is actually being sent
 
