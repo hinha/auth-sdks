@@ -384,7 +384,7 @@ These are **separate Go modules** so consumers can install only what they need
 |---|---|
 | Logging | `go get github.com/hinha/auth-sdks/go/stdlog@…` — see [`go/stdlog/README.md`](./go/stdlog/README.md) |
 | Logging Echo MW | `go get github.com/hinha/auth-sdks/go/stdlog/echo@…` — [`go/stdlog/echo`](./go/stdlog/echo/README.md) |
-| Observability | `go get github.com/hinha/auth-sdks/go/obs@v0.3.0` — [`go/obs/README.md`](./go/obs/README.md) |
+| Observability | `go get github.com/hinha/auth-sdks/go/obs@v0.3.1` — [`go/obs/README.md`](./go/obs/README.md) |
 | Rate limit (memory) | `go get github.com/hinha/auth-sdks/go/ratelimit@…` — [`go/ratelimit/README.md`](./go/ratelimit/README.md) |
 | Rate limit Redis store | `go get github.com/hinha/auth-sdks/go/ratelimit/redis@…` — [`go/ratelimit/redis`](./go/ratelimit/redis/README.md) |
 | Rate limit Echo MW | `go get github.com/hinha/auth-sdks/go/ratelimit/echo@…` — [`go/ratelimit/echo`](./go/ratelimit/echo/README.md) |

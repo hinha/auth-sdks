@@ -102,6 +102,13 @@ func (id identity) semconvAttributes() []attribute.KeyValue {
 	return attrs
 }
 
+// resourceAttributes is the tracer resource set. Tempo nodes join on
+// service.name; namespace and deployment.environment.name keep the graph
+// aligned with metric identity labels.
+func resourceAttributes(cfg Config) []attribute.KeyValue {
+	return resolveIdentity(cfg).semconvAttributes()
+}
+
 // extraLabels is retained for callers that build the label set straight from a
 // Config. New code should resolve the identity once and reuse it.
 func extraLabels(cfg Config) []prompb.Label {

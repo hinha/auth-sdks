@@ -152,11 +152,15 @@ func TestHTTPMiddleware_AndWrapTransport_NestedSpans(t *testing.T) {
 	require.Len(t, spans, 2)
 	var cID, sID string
 	for _, s := range spans {
-		switch attrMap(s.Attributes())["component"] {
+		attrs := attrMap(s.Attributes())
+		switch attrs["component"] {
 		case hopComponentHTTPClient:
 			require.Equal(t, codes.Unset, s.Status().Code)
+			require.Equal(t, "upstream", attrs["peer.service"])
 			cID = s.Parent().SpanID().String()
 		case hopComponentHTTPServer:
+			_, hasPeer := attrs["peer.service"]
+			require.False(t, hasPeer)
 			sID = s.SpanContext().SpanID().String()
 		}
 	}

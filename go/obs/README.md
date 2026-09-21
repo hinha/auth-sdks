@@ -10,7 +10,7 @@ Does **not** import `stdlog` or the Auth SDK client.
 ## Install
 
 ```bash
-go get github.com/hinha/auth-sdks/go/obs@v0.3.0
+go get github.com/hinha/auth-sdks/go/obs@v0.3.1
 ```
 
 ## Gigapipe ingest (this module)
@@ -69,7 +69,7 @@ histogram family plus Tempo child spans. This module does **not** import
 err := h.Observe(ctx, obs.Hop{
     Component: "redis",
     Operation: "GET",      // command name, never the key
-    Peer:      "cache",    // logical dest, never a URL with query
+    Peer:      "cache",    // must match downstream Config.Service, never a URL
 }, func(ctx context.Context) error {
     return rdb.Get(ctx, key).Err()
 })
@@ -102,12 +102,39 @@ e.Use(echo.WrapMiddleware(h.HTTPMiddleware(obs.WithRoute(func(r *http.Request) s
     return "unmatched"
 }))))
 
-http.DefaultTransport = h.WrapTransport(http.DefaultTransport, obs.WithPeer("upstream"))
+http.DefaultTransport = h.WrapTransport(http.DefaultTransport, obs.WithPeer("auth-service"))
 ```
+
+`WithPeer(...)` / `Hop.Peer` **must** equal the downstream process's
+`Config.Service` (its resource `service.name`). Without `WithPeer`,
+`WrapTransport` still uses `req.URL.Host` — Grafana gets a virtual node named
+`host:port`, not a join to the real instrumented service.
 
 Default inbound operation is `METHOD unmatched`, never `URL.Path`. Outbound
 operation is the method only unless `WithPathTemplate` is set. Wrapping an
 already-wrapped transport double-counts duration — wrap once.
+
+### Tempo service graph
+
+Client hops emit the attributes Tempo's metrics-generator reads to draw
+`service.name → peer` (HTTP between services plus virtual Redis/DB nodes).
+Custom labels `component` / `operation` / `peer` stay on the span for search;
+Tempo does **not** read the custom `peer` key.
+
+| Span | Attributes |
+|---|---|
+| Client hop (not `unknown` peer) | `peer.service` = `Hop.Peer` |
+| Redis | `db.system=redis` |
+| DB | `db.system` from Peer (`postgresql` / `mysql` / `sqlite` / `other_sql`) |
+| HTTP client (`WrapTransport`) | `server.address` = request hostname (no path/query) |
+| HTTP server | `http.request.method`, `http.route` — **no** `peer.service` |
+
+Default Tempo `peer_attributes`: `peer.service`, `db.name`, `db.system`. Do not
+rely on `peer.service.name` (Tempo does not use it yet).
+
+This SDK cannot draw the Grafana panel by itself. Gigapipe Tempo must enable
+metrics-generator processor `service_graphs`. Confirm in Explore:
+`traces_service_graph_request_total`.
 
 ### App recipes (copy into the service that already has the client library)
 

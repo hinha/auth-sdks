@@ -135,7 +135,10 @@ func (h *Handle) startHopSpan(ctx context.Context, hop Hop) (context.Context, tr
 	if hop.Component == hopComponentHTTPServer {
 		kind = trace.SpanKindServer
 	}
-	return h.Tracer(hopTracerName).Start(ctx, hop.Operation, trace.WithSpanKind(kind))
+	return h.Tracer(hopTracerName).Start(ctx, hop.Operation,
+		trace.WithSpanKind(kind),
+		trace.WithAttributes(hopSemconvAttrs(hop)...),
+	)
 }
 
 func (h *Handle) observeHop(hop Hop, status string, d time.Duration) {
