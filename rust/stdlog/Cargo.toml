@@ -1,0 +1,18 @@
+[package]
+name = "auth-sdks-stdlog"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+repository.workspace = true
+description = "Gigapipe Loki log sink for Rust services"
+
+[lib]
+name = "stdlog"
+path = "src/lib.rs"
+
+[dependencies]
+reqwest = { version = "0.12", features = ["blocking"] }
+serde_json = "1"
+
+[dev-dependencies]

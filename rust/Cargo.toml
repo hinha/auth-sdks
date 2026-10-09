@@ -1,0 +1,10 @@
+[workspace]
+resolver = "2"
+members = ["obs", "stdlog"]
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.96"
+version = "0.1.0"
+publish = false
+repository = "https://github.com/hinha/auth-sdks"
