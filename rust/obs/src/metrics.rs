@@ -1,4 +1,4 @@
-//! Merged gather and conversion into Prometheus remote-write series. Mirrors `go/obs/prometheus.go`.
+//! Merged gather and conversion into Prometheus remote-write series.
 
 use std::collections::{BTreeMap, HashSet};
 

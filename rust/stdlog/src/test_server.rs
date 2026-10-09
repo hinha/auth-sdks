@@ -1,5 +1,5 @@
-//! Minimal HTTP/1.1 capture server for in-process tests. It plays the role of `httptest` in the Go
-//! suite: a real TCP listener on an ephemeral port, with each request recorded for assertions.
+//! Minimal HTTP/1.1 capture server for in-process tests: a real TCP listener on an ephemeral port,
+//! with each request recorded for assertions.
 
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read, Write};

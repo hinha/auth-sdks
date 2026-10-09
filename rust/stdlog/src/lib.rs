@@ -1,10 +1,9 @@
 //! Gigapipe Loki log sink for Rust services.
 //!
-//! Padanan `go/stdlog/loki.go` (`WrapLoki`). Records are pushed as JSON to
-//! `POST {url}/loki/api/v1/push` with HTTP Basic auth. The sink is fail-open: a transport error or
-//! a rejected push never reaches the caller.
+//! Records are pushed as JSON to `POST {url}/loki/api/v1/push` with HTTP Basic auth. The sink is
+//! fail-open: a transport error or a rejected push never reaches the caller.
 //!
-//! Like `go/stdlog`, this crate does not depend on `auth-sdks-obs`. Metrics, traces, and profiles
+//! This crate does not depend on `auth-sdks-obs`. Metrics, traces, and profiles
 //! live in `rust/obs`.
 
 mod config;

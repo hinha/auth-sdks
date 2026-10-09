@@ -5,7 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 publish.workspace = true
 repository.workspace = true
-description = "Gigapipe Loki log sink for Rust services (padanan go/stdlog WrapLoki)"
+description = "Gigapipe Loki log sink for Rust services"
 
 [lib]
 name = "stdlog"

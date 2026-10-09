@@ -5,7 +5,7 @@ use std::time::SystemTime;
 
 use serde_json::Value;
 
-/// Severity, rendered lowercase as Go's `loki.go` writes the `level` label.
+/// Severity, rendered lowercase as the `level` label.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Level {
     Debug,

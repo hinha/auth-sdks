@@ -1,5 +1,5 @@
-//! OTLP/HTTP traces to `{url}/v1/traces`, with Basic auth and batch export. Mirrors `go/obs`
-//! `tempo.go`. Export is fail-open: the provider exists even when no exporter could be built.
+//! OTLP/HTTP traces to `{url}/v1/traces`, with Basic auth and batch export. Export is fail-open:
+//! the provider exists even when no exporter could be built.
 
 use std::collections::HashMap;
 

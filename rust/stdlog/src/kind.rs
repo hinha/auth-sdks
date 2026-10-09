@@ -1,4 +1,4 @@
-//! Loki `kind` label. Mirrors `kindFrom` in `go/stdlog/loki.go`.
+//! Loki `kind` label.
 
 use serde_json::Value;
 
@@ -9,9 +9,9 @@ pub const KIND_SDK: &str = "sdk";
 
 /// Explicit field that overrides the message-based kind.
 pub const FIELD_KIND: &str = "kind";
-/// Message of an audit record (`go/stdlog/audit.go` `AuditLogMessage`).
+/// Message of an audit record.
 pub const AUDIT_LOG_MESSAGE: &str = "audit event";
-/// Message of an access-log record (`go/stdlog/logger.go` `AccessLogMessage`).
+/// Message of an access-log record.
 pub const ACCESS_LOG_MESSAGE: &str = "http request completed";
 
 /// The first non-empty string `kind` field wins. Otherwise the message decides, and the default is

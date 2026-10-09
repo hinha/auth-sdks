@@ -1,10 +1,9 @@
 # obs
 
-Crate: `auth-sdks-obs` (library name `obs`). Padanan Rust untuk [`go/obs`](../../go/obs/README.md).
+Crate: `auth-sdks-obs` (library name `obs`).
 
 Gigapipe metrics, traces, and profiles for Rust services. The same endpoints serve all three
-signals, and logs live in the sibling crate [`stdlog`](../stdlog/README.md), as `go/stdlog` does
-for Go.
+signals. Logs live in the sibling crate [`stdlog`](../stdlog/README.md).
 
 | Signal | Endpoint | Notes |
 |---|---|---|
@@ -16,7 +15,7 @@ Endpoints are from [gigapipe.com/docs/api](https://gigapipe.com/docs/api).
 
 ## Install
 
-Git dependency, pinned to the crate's release tag (the same pattern as the Go `go/obs/v…` tags):
+Git dependency, pinned to the crate's release tag:
 
 ```toml
 [dependencies]
@@ -66,11 +65,9 @@ An empty `url` makes the handle local-only. Nothing is sent, and the registry st
 | `process_filesystem_avail_bytes` / `_size_bytes` | gauge | `path` (statvfs, Unix) |
 | `client_request_duration_seconds` | histogram | `component`, `operation`, `peer`, `status` |
 
-Rust has no `go_*` runtime metrics. That is the one intentional divergence from `go/obs`.
-
 Identity labels, the 1024-tuple cap on hop series, the label bounds (component 32, operation 128,
 peer 64, status 16 characters), and the dropped secret labels (`password`, `token`,
-`authorization`, `api_key`) match `go/obs`.
+`authorization`, `api_key`) apply to every series.
 
 ## Fail-open
 
@@ -85,5 +82,5 @@ cargo test -p auth-sdks-obs --locked
 cargo llvm-cov -p auth-sdks-obs --locked --summary-only
 ```
 
-The tests run against an in-process capture server (`src/test_server.rs`), which plays the part of
-Go's `httptest`. They never reach a live Gigapipe.
+The tests run against an in-process capture server (`src/test_server.rs`). They never reach a live
+Gigapipe.

@@ -1,4 +1,4 @@
-//! Configuration for [`crate::Handle`]. Field names and defaults mirror `go/obs` `Config`.
+//! Configuration for [`crate::Handle`].
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -7,11 +7,11 @@ use std::time::Duration;
 /// Receives fail-open warnings as `(key, detail)`. Each key is reported once per handle.
 pub type WarnFn = Arc<dyn Fn(&str, &str) + Send + Sync>;
 
-/// Default HTTP timeout for pushes and OTLP export (`go/obs`: 5 s).
+/// Default HTTP timeout for pushes and OTLP export (5 s).
 pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(5);
-/// Default remote-write interval (`go/obs`: 15 s).
+/// Default remote-write interval (15 s).
 pub const DEFAULT_METRICS_INTERVAL: Duration = Duration::from_secs(15);
-/// Maximum distinct filesystem paths sampled (`go/obs`: 8).
+/// Maximum distinct filesystem paths sampled (8).
 pub const MAX_FILESYSTEM_PATHS: usize = 8;
 /// Filesystem path sampled when none is configured (the process working directory).
 pub const DEFAULT_FILESYSTEM_PATH: &str = ".";
@@ -53,7 +53,7 @@ pub struct Config {
 }
 
 impl Config {
-    /// Applies the Go defaults. Zero durations take their defaults, and filesystem paths are
+    /// Applies the defaults. Zero durations take their defaults, and filesystem paths are
     /// cleaned, de-duplicated, and capped.
     pub(crate) fn normalized(mut self) -> Self {
         if self.timeout.is_zero() {

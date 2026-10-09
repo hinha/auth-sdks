@@ -1,6 +1,5 @@
 //! HTTP instrumentation. [`ServerLayer`] wraps an inbound `tower` service (axum, hyper, tower).
-//! [`execute`] runs an outbound `reqwest` request as a hop. Mirrors `go/obs/http.go` and
-//! `hop_http.go`.
+//! [`execute`] runs an outbound `reqwest` request as a hop.
 
 use std::future::Future;
 use std::pin::Pin;
@@ -19,7 +18,7 @@ use crate::hop::{COMPONENT_HTTP_CLIENT, COMPONENT_HTTP_SERVER, Hop, UNKNOWN, htt
 /// cardinality bounded, so a raw path with IDs must never be returned.
 pub type RouteFn = Arc<dyn Fn(&str, &str) -> String + Send + Sync>;
 
-/// Route label when no resolver is set. Go uses the literal `unmatched`, never the URL path.
+/// Route label when no resolver is set. It is the literal `unmatched`, never the URL path.
 pub const UNMATCHED_ROUTE: &str = "unmatched";
 
 fn unmatched(_method: &str, _path: &str) -> String {
@@ -34,7 +33,7 @@ pub struct ServerLayer {
 }
 
 impl ServerLayer {
-    /// A layer whose route is `unmatched`, as in Go's default. Use [`ServerLayer::with_route`] to
+    /// A layer whose route is `unmatched`. Use [`ServerLayer::with_route`] to
     /// report templates.
     pub fn new(handle: Arc<Handle>) -> Self {
         Self {
@@ -107,7 +106,7 @@ where
 }
 
 /// Sends an outbound request as one `http_client` hop. An empty `peer` falls back to the request's
-/// `host:port`, the virtual node Go uses. Status is the response code, or `500` on a transport
+/// `host:port`. Status is the response code, or `500` on a transport
 /// error. The `server.address` attribute carries the host, without path or query.
 pub async fn execute(
     handle: &Handle,
@@ -137,7 +136,7 @@ pub async fn execute(
 }
 
 /// Runs an outbound send that has already been started as one `http_client` hop. The status label
-/// is the response code, as in Go, or `500` on a transport error. The response or error is
+/// is the response code, or `500` on a transport error. The response or error is
 /// returned unchanged.
 pub async fn observe_send<Fut, E>(
     handle: &Handle,

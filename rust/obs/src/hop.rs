@@ -1,6 +1,5 @@
 //! Client and server hops. One histogram family plus one span per hop, so a request reads as
-//! `incoming HTTP -> DB -> Redis -> outbound HTTP` in Grafana. Mirrors `go/obs/hop.go` and
-//! `hop_semconv.go`.
+//! `incoming HTTP -> DB -> Redis -> outbound HTTP` in Grafana.
 
 use std::collections::HashSet;
 use std::future::Future;
@@ -13,7 +12,7 @@ use prometheus::{HistogramOpts, HistogramVec, Registry};
 
 use crate::handle::Handle;
 
-/// Histogram family name, as in Go.
+/// Histogram family name.
 pub const METRIC_CLIENT_REQUEST_DURATION: &str = "client_request_duration_seconds";
 /// Component of an inbound HTTP request.
 pub const COMPONENT_HTTP_SERVER: &str = "http_server";
@@ -115,7 +114,7 @@ pub fn split_http_operation(op: &str) -> (String, String) {
     }
 }
 
-/// Span attributes derived from the hop, as `hopSemconvAttrs` in Go. The downstream service is
+/// Span attributes derived from the hop. The downstream service is
 /// the `peer.service` edge that Tempo's service graph reads.
 fn semconv_attributes(hop: &Hop) -> Vec<KeyValue> {
     let mut attrs = Vec::new();

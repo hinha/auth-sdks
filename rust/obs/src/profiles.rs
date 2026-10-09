@@ -1,6 +1,6 @@
 //! Continuous CPU profiles pushed to Pyroscope's `/ingest` API, as Gigapipe documents. The agent
 //! is the `pyroscope` 0.5 line with the pprof backend. The 2.x line pushes to a Connect RPC path
-//! that Gigapipe does not expose, so it is not used. Mirrors `go/obs/pyroscope.go`.
+//! that Gigapipe does not expose, so it is not used.
 
 use pyroscope::pyroscope::{PyroscopeAgent, PyroscopeAgentBuilder, PyroscopeAgentRunning};
 use pyroscope_pprofrs::{PprofConfig, pprof_backend};
@@ -8,7 +8,7 @@ use pyroscope_pprofrs::{PprofConfig, pprof_backend};
 use crate::config::Config;
 use crate::identity::Identity;
 
-/// Sampling frequency in Hz (`pyroscope-go` default).
+/// Sampling frequency in Hz.
 pub const SAMPLE_RATE_HZ: u32 = 100;
 
 /// The origin (`scheme://host[:port]`) of a Gigapipe URL. The agent appends `/ingest` itself, so a

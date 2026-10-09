@@ -1,6 +1,5 @@
-//! Default metric families emitted without any registration. Mirrors `go/obs` `metrics.go`,
-//! `process_io*.go`, and `filesystem*.go`. Rust has no `go_*` runtime metrics, so that part of the
-//! Go default set is intentionally absent.
+//! Default metric families emitted without any registration. Process and filesystem families
+//! depend on the platform.
 
 use prometheus::Registry;
 use prometheus::proto::{Gauge, LabelPair, Metric, MetricFamily, MetricType};

@@ -1,4 +1,4 @@
-//! Fail-open warnings. Mirrors `warn` in `go/obs/obs.go`.
+//! Fail-open warnings.
 
 use std::collections::HashSet;
 use std::sync::Mutex;

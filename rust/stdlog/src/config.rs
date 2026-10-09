@@ -1,4 +1,4 @@
-//! Configuration for the Loki sink. Defaults mirror `go/stdlog` `LokiConfig`.
+//! Configuration for the Loki sink.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -7,11 +7,11 @@ use std::time::Duration;
 /// detail is the HTTP status (`401 Unauthorized`) or `error` for a transport failure.
 pub type WarnFn = Arc<dyn Fn(&str, &str) + Send + Sync>;
 
-/// Default HTTP timeout per push (`go/stdlog`: 5 s).
+/// Default HTTP timeout per push (5 s).
 pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(5);
-/// Records per push (`go/stdlog`: 50).
+/// Records per push (50).
 pub const DEFAULT_BATCH_SIZE: usize = 50;
-/// Maximum buffered records before the oldest is dropped (`go/stdlog`: 1000).
+/// Maximum buffered records before the oldest is dropped (1000).
 pub const DEFAULT_MAX_BUFFER: usize = 1000;
 
 /// Settings for [`crate::LokiSink`]. An empty `url` disables the sink.
@@ -29,7 +29,7 @@ pub struct LokiConfig {
     pub timeout: Duration,
     /// Zero means [`DEFAULT_BATCH_SIZE`].
     pub batch_size: usize,
-    /// Zero disables the periodic flush. Batches then leave on size or at shutdown, as in Go.
+    /// Zero disables the periodic flush. Batches then leave on size or at shutdown.
     pub flush_interval: Duration,
     /// Zero means [`DEFAULT_MAX_BUFFER`].
     pub max_buffer: usize,
@@ -40,7 +40,7 @@ pub struct LokiConfig {
 }
 
 impl LokiConfig {
-    /// Applies the Go defaults for zero values, as `WrapLoki` does.
+    /// Applies the defaults for zero values.
     pub(crate) fn normalized(mut self) -> Self {
         if self.timeout.is_zero() {
             self.timeout = DEFAULT_TIMEOUT;

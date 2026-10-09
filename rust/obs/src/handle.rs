@@ -1,4 +1,4 @@
-//! The runtime handle. Mirrors `go/obs/obs.go` (`New`, `Registerer`, `Shutdown`).
+//! The runtime handle.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -19,7 +19,7 @@ use crate::remote_write::{self, MetricsWorker, Remote};
 use crate::traces;
 use crate::warn::Warner;
 
-/// Name of the tracer used for hop spans, as in Go.
+/// Name of the tracer used for hop spans.
 pub const TRACER_NAME: &str = "obs";
 
 /// The Gigapipe runtime for one process: metrics, traces, and profiles.
@@ -123,7 +123,7 @@ impl Handle {
         }
     }
 
-    /// The application registry. Register your own collectors here, as with Go's `Registerer()`.
+    /// The application registry. Register your own collectors here.
     /// Your families take precedence over default families with the same name.
     pub fn registry(&self) -> &Registry {
         &self.gatherer.registry

@@ -1,6 +1,5 @@
 //! Prometheus remote write. Snappy-compressed protobuf is POSTed to
-//! `{url}/api/v1/prom/remote/write`. Mirrors `go/obs/prometheus.go` and `go/obs/obs.go`
-//! `loopMetrics`.
+//! `{url}/api/v1/prom/remote/write`.
 
 use std::sync::Arc;
 use std::sync::mpsc::{self, RecvTimeoutError, Sender};
@@ -17,9 +16,9 @@ use crate::warn::Warner;
 
 /// Path appended to the Gigapipe base URL for remote write.
 pub const REMOTE_WRITE_PATH: &str = "/api/v1/prom/remote/write";
-/// `User-Agent` for remote-write pushes (`go/obs`: `auth-sdks-obs/1`).
+/// `User-Agent` for remote-write pushes.
 pub const USER_AGENT_VALUE: &str = "auth-sdks-obs/1";
-/// Warning key for failed writes, as in Go.
+/// Warning key for failed writes.
 pub const WARN_WRITE_FAILED: &str = "gigapipe prometheus write failed";
 
 /// Appends `suffix` to `base` unless `base` already ends with it. A trailing slash is trimmed.

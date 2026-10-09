@@ -1,4 +1,4 @@
-//! Gigapipe/Loki push sink. Padanan `go/stdlog/loki.go` (`WrapLoki`).
+//! Gigapipe/Loki push sink.
 //!
 //! [`LogExporter::export`] only appends to a bounded buffer, so the caller never waits on the
 //! network. One worker thread owns the blocking HTTP client and posts a batch when the buffer
@@ -22,9 +22,9 @@ use crate::redact::{redact_text, skip_secret_key};
 
 /// Path appended to the Gigapipe base URL.
 pub const PUSH_PATH: &str = "/loki/api/v1/push";
-/// `User-Agent` sent with every push (`go/stdlog`: `auth-sdks-stdlog/1`).
+/// `User-Agent` sent with every push.
 pub const USER_AGENT_VALUE: &str = "auth-sdks-stdlog/1";
-/// Warning key reported once per sink, as Go's `warnPush` does.
+/// Warning key reported once per sink.
 pub const WARN_KEY: &str = "gigapipe loki push failed";
 
 /// Normalizes a base URL into the push endpoint. A URL that already ends in the push path is kept.
@@ -76,7 +76,7 @@ pub struct LokiSink {
 
 impl LokiSink {
     /// Starts the worker. An empty `cfg.url` returns a disabled sink that drops every record,
-    /// like `WrapLoki` with an empty URL.
+    /// with an empty URL.
     pub fn new(cfg: LokiConfig) -> Arc<Self> {
         let cfg = cfg.normalized();
         if cfg.url.trim().is_empty() {
@@ -190,7 +190,7 @@ impl Shared {
                 return (state.buf.drain(..).collect(), true);
             }
             if state.buf.len() >= self.batch_size {
-                // A size-triggered push never exceeds `batch_size`, as Go's enqueue, so a backlog
+                // A size-triggered push never exceeds `batch_size`, so a backlog
                 // leaves in several requests rather than one oversized body.
                 let take = self.batch_size.min(state.buf.len());
                 return (state.buf.drain(..take).collect(), false);
@@ -277,7 +277,7 @@ fn build_entry(shared: &Shared, record: &LogRecord) -> Entry {
     }
 }
 
-/// The Loki stream labels, as `labelsFor` in `go/stdlog/loki.go`. Audit records also carry
+/// The Loki stream labels. Audit records also carry
 /// `event_type` and `decision`. Labels stay low-cardinality, so IDs and session values are never
 /// added here.
 fn labels_for(shared: &Shared, record: &LogRecord, kind: &str) -> BTreeMap<String, String> {
@@ -312,7 +312,7 @@ fn labels_for(shared: &Shared, record: &LogRecord, kind: &str) -> BTreeMap<Strin
     labels
 }
 
-/// The JSON line for one record, as `lineJSON` in `go/stdlog/loki.go`. Secret-bearing keys are
+/// The JSON line for one record. Secret-bearing keys are
 /// dropped, and configured secret values are scrubbed from string fields. Nested values are not
 /// walked, so keep secrets out of nested objects.
 fn line_json(shared: &Shared, record: &LogRecord) -> String {
@@ -342,7 +342,7 @@ fn redact_value(value: &Value, secrets: &[String]) -> Value {
 }
 
 /// The Loki push body. Entries are grouped into one stream per distinct label set, in the order
-/// the streams first appear, as in Go.
+/// the streams first appear.
 fn push_body(batch: &[Entry]) -> String {
     let mut streams: Vec<(BTreeMap<String, String>, Vec<Value>)> = Vec::new();
     let mut index: HashMap<String, usize> = HashMap::new();
@@ -580,11 +580,11 @@ mod tests {
     }
 
     #[test]
-    fn field_named_msg_overrides_the_message_like_go() {
+    fn field_named_msg_overrides_the_message() {
         let shared = Shared::new(String::new(), cfg_for("").normalized());
         let rec = LogRecord::new(Level::Info, "original").with_field("msg", "overridden");
         let parsed: Value = serde_json::from_str(&line_json(&shared, &rec)).expect("json");
-        assert_eq!(parsed["msg"], "overridden", "later field wins, as in Go");
+        assert_eq!(parsed["msg"], "overridden", "later field wins");
     }
 
     #[test]

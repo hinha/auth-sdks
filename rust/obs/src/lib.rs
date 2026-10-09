@@ -1,6 +1,6 @@
 //! Gigapipe metrics, traces, and profiles for Rust services.
 //!
-//! Padanan `go/obs`. The same endpoints serve all three signals:
+//! The same endpoints serve all three signals:
 //!
 //! | Signal | Endpoint | Notes |
 //! |---|---|---|
@@ -11,7 +11,7 @@
 //! Every path is fail-open. An empty `Config::url` makes the handle local-only. A failed push or
 //! export is reported once through `Config::on_warn` and never blocks or panics the caller.
 //!
-//! Logs live in the sibling crate `auth-sdks-stdlog`, as `go/stdlog` does for Go.
+//! Logs live in the sibling crate `auth-sdks-stdlog`.
 
 mod collectors;
 mod config;

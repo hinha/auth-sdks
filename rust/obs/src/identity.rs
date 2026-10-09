@@ -1,9 +1,9 @@
 //! The one resolved service identity shared by metrics, traces, and profiles, so the three cannot
-//! drift apart. Mirrors `go/obs/identity.go`.
+//! drift apart.
 
 use crate::config::Config;
 
-/// Fallback `service_name` when no `service` is configured (`go/obs`: `auth-sdks`).
+/// Fallback `service_name` when no `service` is configured.
 pub const DEFAULT_SERVICE_NAME: &str = "auth-sdks";
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -1,5 +1,5 @@
 //! Prometheus remote-write 1.0 protobuf messages. Hand-written to match `prompb/remote.proto` and
-//! `types.proto`, so the build needs no `protoc`. Field numbers mirror the Go `internal/prompb`.
+//! `types.proto`, so the build needs no `protoc`.
 
 /// `prometheus.WriteRequest`.
 #[derive(Clone, PartialEq, ::prost::Message)]

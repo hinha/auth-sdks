@@ -1,4 +1,4 @@
-//! Secret scrubbing for Loki lines. Mirrors `skipSecretKey` in `go/stdlog/loki.go`.
+//! Secret scrubbing for Loki lines.
 
 /// Text written in place of a configured secret value.
 pub const REDACTED: &str = "[REDACTED]";
