@@ -18,6 +18,7 @@ auth-sdks/
 | Language | Path | Module / package | Status |
 |---|---|---|---|
 | **Go** | [`go/`](./go) | `github.com/hinha/auth-sdks/go` | Available |
+| **Rust** | [`rust/`](./rust) | `auth-sdks-obs` (`obs`), `auth-sdks-stdlog` (`stdlog`) | Available |
 | Python | `python/` | planned | Planned |
 | TypeScript | `typescript/` | planned | Planned |
 

@@ -1,0 +1,37 @@
+[package]
+name = "auth-sdks-obs"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+repository.workspace = true
+description = "Gigapipe metrics, traces, and profiles ingest for Rust services (padanan go/obs)"
+
+[lib]
+name = "obs"
+path = "src/lib.rs"
+
+[dependencies]
+prometheus = "0.14"
+prost = "0.14"
+snap = "1"
+reqwest = { version = "0.12", features = ["blocking"] }
+base64 = "0.22"
+http = "1"
+tower = { version = "0.5", features = ["util"] }
+opentelemetry = "0.33"
+opentelemetry_sdk = "0.33"
+opentelemetry-otlp = { version = "0.33", default-features = false, features = ["trace", "http-proto", "reqwest-blocking-client"] }
+# pyroscope 2.x pushes to a Connect RPC path, not Gigapipe's documented /ingest. 0.5.x matches /ingest.
+pyroscope = "0.5"
+pyroscope_pprofrs = "0.2"
+
+[target.'cfg(unix)'.dependencies]
+nix = { version = "0.31", features = ["fs"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+procfs = "0.18"
+prometheus = { version = "0.14", features = ["process"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread", "time"] }
